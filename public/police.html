@@ -836,7 +836,7 @@ video {
     <div class="ctrl-status">
       <div class="ctrl-status-item"><div class="dot"></div>AI ENGINE</div>
       <div class="ctrl-status-item"><div class="dot"></div>POLICE NET</div>
-      <div class="ctrl-status-item"><div class="dot"></div>RECORDING</div>
+      <div class="ctrl-status-item"><div class="dot"></div>SERVER: <span id="sysStatus" style="color:var(--yellow);">CONNECTING</span></div>
     </div>
   </div>
 
@@ -1339,74 +1339,244 @@ setTimeout(()=>{
 
 </script>
 <script>
+// ═══════════════════════════════════════════════════════════════
+// HER ALERT – DASHBOARD SOCKET.IO + WebRTC
+// THE CRITICAL FIX: Listen for "alert-triggered" from server
+// ═══════════════════════════════════════════════════════════════
+
 const socket = io();
+const peers  = {};
 
-const peers = {};
+/* ── Register as dashboard immediately on connect ── */
+socket.on("connect", () => {
+  console.log("[HER ALERT] Dashboard connected, SID:", socket.id);
+  socket.emit("register-dashboard");
+  addLog("✅ Connected to HER ALERT server", "ok");
+  document.getElementById("sysStatus").textContent   = "ONLINE";
+  document.getElementById("sysStatus").style.color   = "var(--green)";
+});
 
-socket.emit("register-dashboard");
+socket.on("disconnect", () => {
+  addLog("⚠ Server connection lost – reconnecting…", "warn");
+  document.getElementById("sysStatus").textContent   = "RECONNECTING";
+  document.getElementById("sysStatus").style.color   = "var(--yellow)";
+});
 
+socket.on("reconnect", () => {
+  addLog("🔄 Reconnected to server", "ok");
+  socket.emit("register-dashboard");
+  document.getElementById("sysStatus").textContent   = "ONLINE";
+  document.getElementById("sysStatus").style.color   = "var(--green)";
+});
+
+socket.on("register-ack", ({ role, status }) => {
+  addLog(`Server acknowledged: ${role} registration (${status})`, "ok");
+});
+
+/* ── Camera registry events ── */
+socket.on("camera-list", (list) => {
+  console.log("[HER ALERT] Camera list received:", list);
+  list.forEach(cam => {
+    addLog(`📷 Camera ${cam.nodeId} online – ${cam.location || ""}`, "ok");
+    highlightCameraNode(cam.nodeId, "connected");
+  });
+});
+
+socket.on("camera-connected", ({ nodeId, location }) => {
+  addLog(`📷 Camera ${nodeId} connected (${location})`, "ok");
+  highlightCameraNode(nodeId, "connected");
+  showNotif("📷 CAMERA CONNECTED", `${nodeId} is now online`, "green-n");
+});
+
+socket.on("camera-disconnected", ({ nodeId }) => {
+  addLog(`⚠ Camera ${nodeId} disconnected`, "warn");
+  highlightCameraNode(nodeId, "disconnected");
+  showNotif("⚠ CAMERA OFFLINE", `${nodeId} disconnected`, "yellow-n");
+});
+
+/* ══════════════════════════════════════════════════════════════
+   ★ THE MAIN FIX: RECEIVE AND DISPLAY ALERTS FROM CAMERAS ★
+   ══════════════════════════════════════════════════════════════ */
+socket.on("alert-triggered", (payload) => {
+  console.log("[HER ALERT] 🚨 ALERT RECEIVED:", payload);
+
+  const { nodeId, alertType, word, level, description, timestamp, location } = payload;
+
+  // 1. Log entry
+  addLog(`🚨 ${alertType} ALERT from ${nodeId}: "${word || description}"`, "alert");
+
+  // 2. Flash red overlay
+  triggerDashboardAlert(nodeId, alertType, word, description, timestamp, location, level);
+
+  // 3. Add to alert feed
+  const alertColor = alertType === "VOICE" ? "red" : alertType === "SCREAM" ? "orange" : "red";
+  addAlertItem(alertColor, `${alertType} – ${nodeId}`, word || description);
+
+  // 4. Highlight the camera node card
+  highlightCameraNode(nodeId, "alert");
+
+  // 5. Show notification banner
+  showNotif(`🚨 ${alertType} DETECTED`, `${nodeId}: ${word || description}`, "red-n");
+
+  // 6. Update threat map / node indicators
+  updateNodeThreat(nodeId, alertType, level);
+});
+
+/* ── Dashboard alert trigger (flash, popup, siren) ── */
+function triggerDashboardAlert(nodeId, alertType, word, description, timestamp, location, level) {
+  // Red flash overlay
+  const flash = document.getElementById("alertFlash");
+  if (flash) { flash.style.display = "block"; setTimeout(() => flash.style.display = "none", 4000); }
+
+  // Show popup modal
+  showAlertModal(nodeId, alertType, word, description, timestamp, location, level);
+
+  // Play siren
+  playSiren();
+
+  // Shake the window title
+  let t = 0;
+  const og = document.title;
+  const blink = setInterval(() => {
+    document.title = t++ % 2 === 0 ? "🚨 EMERGENCY ALERT! 🚨" : og;
+  }, 500);
+  setTimeout(() => { clearInterval(blink); document.title = og; }, 8000);
+}
+
+/* ── Alert Modal ── */
+function showAlertModal(nodeId, alertType, word, description, timestamp, location, level) {
+  // Find or create modal
+  let modal = document.getElementById("ha-alert-modal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "ha-alert-modal";
+    modal.style.cssText = `
+      position:fixed; top:50%; left:50%; transform:translate(-50%,-50%) scale(1);
+      background:rgba(10,0,0,0.97); border:2px solid #ff2244;
+      box-shadow:0 0 80px rgba(255,34,68,0.9), inset 0 0 40px rgba(255,34,68,0.1);
+      padding:30px 40px; z-index:9999; text-align:center; min-width:400px; max-width:600px;
+      font-family:'Orbitron',monospace; border-radius:2px;
+      animation: haModalIn 0.3s ease forwards;
+    `;
+    const style = document.createElement("style");
+    style.textContent = `
+      @keyframes haModalIn { from { opacity:0; transform:translate(-50%,-50%) scale(0.8); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
+      #ha-alert-modal .ha-close { background:#cc0022; border:1px solid #ff2244; color:#fff; font-family:'Orbitron',monospace; font-size:10px; letter-spacing:2px; padding:10px 24px; cursor:pointer; margin-top:20px; transition:all 0.2s; }
+      #ha-alert-modal .ha-close:hover { background:#ff2244; box-shadow:0 0 20px #ff2244; }
+      @keyframes haBlink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+    `;
+    document.head.appendChild(style);
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div style="font-size:48px;animation:haBlink 0.5s infinite;margin-bottom:12px;">🚨</div>
+    <div style="font-size:20px;font-weight:900;color:#ff2244;letter-spacing:4px;text-shadow:0 0 20px #ff2244;margin-bottom:8px;">⚠ EMERGENCY DETECTED ⚠</div>
+    <div style="font-size:13px;color:#ffcc00;letter-spacing:3px;margin-bottom:16px;">${alertType} ALERT – IMMEDIATE RESPONSE REQUIRED</div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:#a0c8e0;line-height:2;margin-bottom:20px;border:1px solid rgba(255,34,68,0.3);padding:12px;">
+      CAMERA NODE &nbsp;: <span style="color:#00d4ff;">${nodeId}</span><br>
+      ALERT TYPE &nbsp;&nbsp;: <span style="color:#ff2244;">${alertType}</span><br>
+      DETECTED &nbsp;&nbsp;&nbsp;: <span style="color:#ffcc00;">${word || description}</span><br>
+      LOCATION &nbsp;&nbsp;&nbsp;: <span style="color:#00ff88;">${location || "AREA UNKNOWN"}</span><br>
+      TIME &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: <span style="color:#00d4ff;">${timestamp}</span><br>
+      THREAT LEVEL: <span style="color:#ff2244;">${level || 100}%</span>
+    </div>
+    <button class="ha-close" onclick="document.getElementById('ha-alert-modal').style.display='none'">ACKNOWLEDGE ALERT</button>
+  `;
+  modal.style.display = "block";
+}
+
+/* ── Siren using Web Audio API ── */
+let sirenCtx = null;
+function playSiren() {
+  try {
+    if (!sirenCtx) sirenCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = sirenCtx.createOscillator();
+    const gain = sirenCtx.createGain();
+    osc.connect(gain); gain.connect(sirenCtx.destination);
+    osc.type = "sawtooth";
+    gain.gain.setValueAtTime(0.3, sirenCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, sirenCtx.currentTime + 2.5);
+    osc.frequency.setValueAtTime(660, sirenCtx.currentTime);
+    osc.frequency.linearRampToValueAtTime(440, sirenCtx.currentTime + 0.5);
+    osc.frequency.linearRampToValueAtTime(660, sirenCtx.currentTime + 1.0);
+    osc.frequency.linearRampToValueAtTime(440, sirenCtx.currentTime + 1.5);
+    osc.frequency.linearRampToValueAtTime(660, sirenCtx.currentTime + 2.0);
+    osc.start(sirenCtx.currentTime);
+    osc.stop(sirenCtx.currentTime + 2.5);
+  } catch(e) { console.warn("Siren audio error:", e); }
+}
+
+/* ── Highlight camera node card on dashboard ── */
+function highlightCameraNode(nodeId, state) {
+  // Try to find node status elements that exist in police.html
+  const num = nodeId === "NODE_1" ? "1" : "2";
+  const statusEl = document.getElementById(`camStatus${num}`);
+  const cardEl   = document.getElementById(`camCard${num}`) || document.querySelector(`[data-node="${nodeId}"]`);
+
+  if (state === "alert") {
+    if (statusEl) { statusEl.textContent = "⚠ ALERT"; statusEl.style.color = "var(--red)"; }
+    if (cardEl)   { cardEl.style.borderColor = "var(--red)"; cardEl.style.boxShadow = "0 0 20px rgba(255,34,68,0.5)"; }
+    // Reset after 8 seconds
+    setTimeout(() => {
+      if (statusEl) { statusEl.textContent = "ACTIVE"; statusEl.style.color = "var(--green)"; }
+      if (cardEl)   { cardEl.style.borderColor = ""; cardEl.style.boxShadow = ""; }
+    }, 8000);
+  } else if (state === "connected") {
+    if (statusEl) { statusEl.textContent = "ONLINE"; statusEl.style.color = "var(--green)"; }
+  } else if (state === "disconnected") {
+    if (statusEl) { statusEl.textContent = "OFFLINE"; statusEl.style.color = "var(--red)"; }
+  }
+}
+
+/* ── Update node threat indicators ── */
+function updateNodeThreat(nodeId, alertType, level) {
+  const num = nodeId === "NODE_1" ? "1" : "2";
+  const threatEl  = document.getElementById(`threat${num}`);
+  const motionEl  = document.getElementById(`motion${num}Bar`);
+  if (threatEl) { threatEl.textContent = "HIGH"; threatEl.style.color = "var(--red)"; }
+  if (motionEl) { motionEl.style.width = (level || 100) + "%"; }
+}
+
+/* ── WebRTC signaling ── */
 socket.on("offer", async ({ nodeId, offer }) => {
-
   const peer = new RTCPeerConnection({
     iceServers: [
-      {
-        urls: "stun:stun.l.google.com:19302"
-      }
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" }
     ]
   });
 
   peers[nodeId] = peer;
 
   peer.ontrack = (event) => {
-
     const stream = event.streams[0];
-
-    let video;
-
-    if (nodeId === "NODE_1") {
-      video = document.getElementById("video1");
-    } else {
-      video = document.getElementById("video2");
-    }
-
-    if (video) {
-      video.srcObject = stream;
-      video.play();
-    }
+    const video  = document.getElementById(nodeId === "NODE_1" ? "video1" : "video2");
+    if (video) { video.srcObject = stream; video.play().catch(() => {}); }
+    addLog(`📹 Live feed from ${nodeId} established`, "ok");
   };
 
   peer.onicecandidate = (event) => {
     if (event.candidate) {
-      socket.emit("ice-candidate", {
-        nodeId,
-        candidate: event.candidate,
-        target: "camera"
-      });
+      socket.emit("ice-candidate", { nodeId, candidate: event.candidate, target: "camera" });
     }
   };
 
-  await peer.setRemoteDescription(
-    new RTCSessionDescription(offer)
-  );
+  peer.onconnectionstatechange = () => {
+    addLog(`WebRTC ${nodeId}: ${peer.connectionState}`, peer.connectionState === "connected" ? "ok" : "info");
+  };
 
+  await peer.setRemoteDescription(new RTCSessionDescription(offer));
   const answer = await peer.createAnswer();
-
   await peer.setLocalDescription(answer);
-
-  socket.emit("answer", {
-    nodeId,
-    answer
-  });
-
-  console.log("connected to", nodeId);
+  socket.emit("answer", { nodeId, answer });
+  console.log("[HER ALERT] WebRTC answer sent for", nodeId);
 });
 
 socket.on("ice-candidate", async ({ nodeId, candidate }) => {
-
   if (peers[nodeId]) {
-    await peers[nodeId].addIceCandidate(
-      new RTCIceCandidate(candidate)
-    );
+    try { await peers[nodeId].addIceCandidate(new RTCIceCandidate(candidate)); }
+    catch(e) { /* benign */ }
   }
 });
 </script>
