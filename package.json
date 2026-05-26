@@ -1,0 +1,13 @@
+{
+  "name": "her-alert",
+  "version": "3.0.0",
+  "description": "HER ALERT – AI Women Safety Surveillance System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  }
+}
