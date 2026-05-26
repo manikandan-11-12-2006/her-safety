@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- ADD THIS INSTEAD -->
+<script src="/socket.io/socket.io.js"></script>
+<title>HER ALERT – CAMERA NODE 02 | AI Surveillance</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #030204;
+    --panel: rgba(10,0,20,0.88);
+    --blue: #00d4ff;
+    --blue2: #0088cc;
+    --red: #ff2244;
+    --red2: #cc0022;
+    --yellow: #ffcc00;
+    --green: #00ff88;
+    --purple: #cc44ff;
+    --gray: #1a0a2a;
+    --border: rgba(204,68,255,0.25);
+    --border2: rgba(0,212,255,0.2);
+    --text: #b0a0c8;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-hud: 'Orbitron', monospace;
+    --font-body: 'Rajdhani', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Diagonal grid bg */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(204,68,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(204,68,255,0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at 20% 80%, rgba(204,68,255,0.05) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(0,212,255,0.04) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #particleCanvas {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.35;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
+    padding: 8px;
+    gap: 8px;
+  }
+
+  /* ===== HEADER ===== */
+  header {
+    background: var(--panel);
+    border: 1px solid rgba(204,68,255,0.3);
+    border-top: 2px solid var(--purple);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 0 40px rgba(204,68,255,0.1), inset 0 0 30px rgba(204,68,255,0.02);
+    flex-wrap: wrap;
+  }
+
+  .logo-block {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .logo-icon {
+    width: 48px; height: 48px;
+    border: 2px solid var(--purple);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-hud);
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--purple);
+    box-shadow: 0 0 15px rgba(204,68,255,0.5), inset 0 0 10px rgba(204,68,255,0.1);
+    animation: logoPulse 2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes logoPulse {
+    0%,100% { box-shadow: 0 0 15px rgba(204,68,255,0.5), inset 0 0 10px rgba(204,68,255,0.1); }
+    50% { box-shadow: 0 0 30px rgba(204,68,255,0.9), inset 0 0 20px rgba(204,68,255,0.2); }
+  }
+
+  .logo-text h1 {
+    font-family: var(--font-hud);
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--purple);
+    letter-spacing: 3px;
+    text-shadow: 0 0 15px rgba(204,68,255,0.7);
+    line-height: 1;
+  }
+  .logo-text p {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--blue);
+    letter-spacing: 2px;
+    margin-top: 2px;
+  }
+
+  .header-center { text-align: center; }
+
+  .cam-node-id {
+    font-family: var(--font-hud);
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--blue);
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px rgba(0,212,255,0.8);
+  }
+  .cam-location {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text);
+    letter-spacing: 2px;
+    margin-top: 2px;
+  }
+
+  .header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+  #liveTime {
+    font-family: var(--font-hud);
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--purple);
+    text-shadow: 0 0 15px rgba(204,68,255,0.8);
+  }
+  #liveDate {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text);
+  }
+  .ai-status-badge {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    padding: 2px 8px;
+    border: 1px solid var(--green);
+    color: var(--green);
+    letter-spacing: 2px;
+    animation: badgePulse 1.5s ease-in-out infinite;
+  }
+  @keyframes badgePulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  .emergency-signal {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--yellow);
+  }
+  .signal-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: signalBlink 1s ease-in-out infinite;
+  }
+  @keyframes signalBlink {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.3; transform: scale(0.7); }
+  }
+
+  /* ===== MAIN CONTENT ===== */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 200px 1fr 200px;
+    gap: 8px;
+  }
+
+  /* ===== PANELS ===== */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(10px);
+    padding: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--purple), transparent);
+  }
+
+  .panel-title {
+    font-family: var(--font-hud);
+    font-size: 9px;
+    color: var(--purple);
+    letter-spacing: 3px;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(204,68,255,0.2);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .panel-title::before {
+    content: '▶';
+    font-size: 7px;
+    color: var(--blue);
+  }
+
+  /* ===== CAMERA INFO PANEL ===== */
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(204,68,255,0.07);
+    font-family: var(--font-mono);
+    font-size: 9px;
+  }
+  .info-label { color: rgba(176,160,200,0.6); letter-spacing: 1px; }
+  .info-value { color: var(--purple); font-weight: bold; }
+  .info-value.green { color: var(--green); }
+  .info-value.red { color: var(--red); }
+  .info-value.yellow { color: var(--yellow); }
+  .info-value.blue { color: var(--blue); }
+
+  .status-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    margin-right: 4px;
+  }
+  .status-dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.red { background: var(--red); box-shadow: 0 0 6px var(--red); animation: signalBlink 0.8s infinite; }
+  .status-dot.yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  .status-dot.blue { background: var(--blue); box-shadow: 0 0 6px var(--blue); animation: signalBlink 1.2s infinite; }
+  .status-dot.purple { background: var(--purple); box-shadow: 0 0 6px var(--purple); animation: signalBlink 1.5s infinite; }
+
+  /* ===== CAMERA FEED ===== */
+  .camera-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .cam-frame {
+    position: relative;
+    background: #000;
+    border: 1px solid rgba(204,68,255,0.3);
+    overflow: hidden;
+    flex: 1;
+    min-height: 380px;
+  }
+
+  .cam-frame::before,
+  .cam-frame::after {
+    content: '';
+    position: absolute;
+    width: 20px; height: 20px;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .cam-frame::before {
+    top: 8px; left: 8px;
+    border-top: 2px solid var(--purple);
+    border-left: 2px solid var(--purple);
+    box-shadow: -2px -2px 8px rgba(204,68,255,0.5);
+  }
+  .cam-frame::after {
+    bottom: 8px; right: 8px;
+    border-bottom: 2px solid var(--purple);
+    border-right: 2px solid var(--purple);
+    box-shadow: 2px 2px 8px rgba(204,68,255,0.5);
+  }
+
+  .corner-br { position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border-top: 2px solid var(--purple); border-right: 2px solid var(--purple); box-shadow: 2px -2px 8px rgba(204,68,255,0.5); z-index: 10; pointer-events: none; }
+  .corner-bl { position: absolute; bottom: 8px; left: 8px; width: 20px; height: 20px; border-bottom: 2px solid var(--purple); border-left: 2px solid var(--purple); box-shadow: -2px 2px 8px rgba(204,68,255,0.5); z-index: 10; pointer-events: none; }
+
+  #videoEl {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  #motionCanvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  .scanline-overlay {
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.12) 2px,
+      rgba(0,0,0,0.12) 4px
+    );
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  /* Purple scan line for cam2 */
+  .ai-scanline {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(204,68,255,0.8), transparent);
+    box-shadow: 0 0 8px rgba(204,68,255,0.6);
+    z-index: 5;
+    animation: scanMove 2.5s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes scanMove {
+    0% { top: 0%; }
+    100% { top: 100%; }
+  }
+
+  /* Secondary scan line (horizontal cross pattern) */
+  .ai-scanline2 {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: linear-gradient(180deg, transparent, rgba(0,212,255,0.4), transparent);
+    z-index: 5;
+    animation: scanMoveH 4s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes scanMoveH {
+    0% { left: 0%; }
+    100% { left: 100%; }
+  }
+
+  .thermal-overlay {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 50%, rgba(204,68,255,0.04) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 2;
+    mix-blend-mode: screen;
+  }
+
+  .cam-hud-tl {
+    position: absolute; top: 14px; left: 36px;
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--purple); z-index: 6; line-height: 1.6;
+    text-shadow: 0 0 6px rgba(204,68,255,0.8);
+  }
+  .cam-hud-tr {
+    position: absolute; top: 14px; right: 36px;
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--purple); z-index: 6; line-height: 1.6;
+    text-align: right;
+    text-shadow: 0 0 6px rgba(204,68,255,0.8);
+  }
+  .cam-hud-bl {
+    position: absolute; bottom: 14px; left: 36px;
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--green); z-index: 6;
+    text-shadow: 0 0 6px rgba(0,255,136,0.8);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .cam-hud-br {
+    position: absolute; bottom: 14px; right: 36px;
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--red); z-index: 6; text-align: right;
+    display: flex; align-items: center; gap: 4px;
+  }
+
+  .rec-dot {
+    width: 8px; height: 8px;
+    background: var(--red);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--red);
+    animation: signalBlink 0.8s infinite;
+    flex-shrink: 0;
+  }
+
+  /* Loading overlay */
+  #loadingOverlay {
+    position: absolute; inset: 0;
+    background: #000;
+    z-index: 20;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 16px;
+  }
+  .loading-ring {
+    width: 60px; height: 60px;
+    border: 2px solid rgba(204,68,255,0.2);
+    border-top-color: var(--purple);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text {
+    font-family: var(--font-hud);
+    font-size: 11px;
+    color: var(--purple);
+    letter-spacing: 3px;
+    animation: badgePulse 1s infinite;
+  }
+
+  /* Alert border */
+  .alert-border {
+    position: absolute; inset: 0;
+    border: 3px solid var(--red);
+    box-shadow: 0 0 30px rgba(255,34,68,0.5), inset 0 0 30px rgba(255,34,68,0.1);
+    z-index: 8;
+    pointer-events: none;
+    display: none;
+    animation: alertBorderPulse 0.5s ease-in-out infinite;
+  }
+  @keyframes alertBorderPulse {
+    0%,100% { box-shadow: 0 0 30px rgba(255,34,68,0.5), inset 0 0 30px rgba(255,34,68,0.1); }
+    50% { box-shadow: 0 0 60px rgba(255,34,68,1), inset 0 0 60px rgba(255,34,68,0.3); }
+  }
+
+  /* ===== REC BAR ===== */
+  .rec-bar {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .rec-label {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-hud);
+    font-size: 11px;
+    color: var(--red);
+    letter-spacing: 2px;
+  }
+
+  .storage-bar {
+    flex: 1;
+    height: 6px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(204,68,255,0.2);
+    position: relative;
+    overflow: hidden;
+    min-width: 80px;
+  }
+  .storage-fill {
+    height: 100%;
+    width: 51%;
+    background: linear-gradient(90deg, #440066, var(--purple));
+    box-shadow: 0 0 8px var(--purple);
+  }
+
+  .ai-scan-bar {
+    flex: 1;
+    height: 6px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(204,68,255,0.2);
+    overflow: hidden;
+    min-width: 80px;
+  }
+  .ai-scan-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--purple), var(--blue));
+    animation: scanFill 1.8s ease-in-out infinite;
+  }
+  @keyframes scanFill {
+    0% { width: 0%; }
+    50% { width: 100%; }
+    100% { width: 0%; }
+  }
+
+  .rec-item {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text);
+    display: flex; align-items: center; gap: 4px;
+  }
+  .rec-item span.val { color: var(--purple); }
+
+  /* ===== AI ANALYSIS PANEL ===== */
+  .ai-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ai-card {
+    background: rgba(204,68,255,0.03);
+    border: 1px solid rgba(204,68,255,0.15);
+    padding: 8px 10px;
+    position: relative;
+    overflow: hidden;
+  }
+  .ai-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--purple), transparent);
+    opacity: 0.4;
+  }
+
+  .ai-card-label {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: rgba(176,160,200,0.5);
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+  }
+  .ai-card-value {
+    font-family: var(--font-hud);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--purple);
+    text-shadow: 0 0 10px rgba(204,68,255,0.6);
+    line-height: 1;
+  }
+  .ai-card-bar {
+    margin-top: 5px;
+    height: 3px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+  .ai-card-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #440066, var(--purple));
+    box-shadow: 0 0 6px var(--purple);
+    transition: width 1s ease;
+  }
+  .ai-card-value.threat-low { color: var(--green); text-shadow: 0 0 10px rgba(0,255,136,0.6); }
+  .ai-card-value.threat-med { color: var(--yellow); text-shadow: 0 0 10px rgba(255,204,0,0.6); }
+  .ai-card-value.threat-high { color: var(--red); text-shadow: 0 0 10px rgba(255,34,68,0.8); animation: badgePulse 0.5s infinite; }
+
+  /* ===== LOG PANEL ===== */
+  .log-scroll {
+    height: 220px;
+    overflow-y: auto;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    line-height: 1.8;
+    scrollbar-width: thin;
+    scrollbar-color: var(--purple) transparent;
+  }
+  .log-scroll::-webkit-scrollbar { width: 3px; }
+  .log-scroll::-webkit-scrollbar-track { background: transparent; }
+  .log-scroll::-webkit-scrollbar-thumb { background: var(--purple); }
+
+  .log-entry {
+    padding: 2px 0;
+    border-bottom: 1px solid rgba(204,68,255,0.05);
+    display: flex; gap: 8px;
+  }
+  .log-time { color: rgba(176,160,200,0.4); white-space: nowrap; }
+  .log-msg { color: var(--text); }
+  .log-msg.motion { color: var(--yellow); }
+  .log-msg.alert { color: var(--red); font-weight: bold; }
+  .log-msg.ok { color: var(--green); }
+  .log-msg.info { color: var(--purple); }
+
+  /* ===== RADAR (hexagonal style) ===== */
+  .radar-container {
+    display: flex;
+    justify-content: center;
+    padding: 10px 0;
+  }
+
+  /* ===== ALERT POPUP ===== */
+  #alertPopup {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.8);
+    background: rgba(20,0,10,0.97);
+    border: 2px solid var(--red);
+    box-shadow: 0 0 60px rgba(255,34,68,0.8), inset 0 0 40px rgba(255,34,68,0.1);
+    padding: 30px 40px;
+    z-index: 1000;
+    text-align: center;
+    display: none;
+    animation: popupIn 0.3s ease forwards;
+    min-width: 320px;
+  }
+  @keyframes popupIn {
+    from { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
+    to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  }
+  .popup-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+    animation: signalBlink 0.5s infinite;
+  }
+  .popup-title {
+    font-family: var(--font-hud);
+    font-size: 16px;
+    font-weight: 900;
+    color: var(--red);
+    letter-spacing: 3px;
+    text-shadow: 0 0 20px var(--red);
+    margin-bottom: 8px;
+  }
+  .popup-sub {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--yellow);
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+  }
+  .popup-detail {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text);
+    line-height: 1.8;
+    margin-bottom: 20px;
+  }
+  .popup-close {
+    background: var(--red2);
+    border: 1px solid var(--red);
+    color: #fff;
+    font-family: var(--font-hud);
+    font-size: 10px;
+    letter-spacing: 2px;
+    padding: 8px 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .popup-close:hover { background: var(--red); box-shadow: 0 0 15px var(--red); }
+
+  /* Alert overlay screen flash */
+  #alertFlash {
+    position: fixed; inset: 0;
+    background: rgba(255,34,68,0.12);
+    z-index: 900;
+    display: none;
+    pointer-events: none;
+    animation: flashAnim 0.5s ease-in-out infinite;
+  }
+  @keyframes flashAnim {
+    0%,100% { opacity: 0; }
+    50% { opacity: 1; }
+  }
+
+  @keyframes shakeAnim {
+    0%,100% { transform: translateX(0); }
+    10%,30%,50%,70%,90% { transform: translateX(-4px); }
+    20%,40%,60%,80% { transform: translateX(4px); }
+  }
+  body.shaking { animation: shakeAnim 0.5s ease; }
+
+  /* ===== FOOTER ===== */
+  footer {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-bottom: 2px solid var(--purple);
+    padding: 8px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    backdrop-filter: blur(10px);
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .footer-item {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: rgba(176,160,200,0.5);
+    display: flex; align-items: center; gap: 5px;
+    letter-spacing: 1px;
+  }
+  .footer-item .dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--purple);
+    box-shadow: 0 0 4px var(--purple);
+    animation: signalBlink 2s infinite;
+  }
+
+  /* Motion warning overlay */
+  #motionWarning {
+    position: absolute; inset: 0;
+    border: 3px solid var(--yellow);
+    z-index: 7;
+    pointer-events: none;
+    display: none;
+    animation: yellowPulse 0.6s ease-in-out infinite;
+  }
+  @keyframes yellowPulse {
+    0%,100% { border-color: var(--yellow); box-shadow: inset 0 0 20px rgba(255,204,0,0.1); }
+    50% { border-color: rgba(255,204,0,0.3); box-shadow: none; }
+  }
+
+  /* SIGNAL STRENGTH */
+  .signal-bars {
+    display: flex; align-items: flex-end; gap: 2px;
+    height: 16px;
+  }
+  .sig-bar {
+    width: 4px;
+    background: var(--purple);
+    box-shadow: 0 0 4px var(--purple);
+  }
+
+  .gps-val { color: var(--yellow) !important; font-size: 8px !important; }
+
+  /* Extra — hexagonal radar element */
+  .hex-radar {
+    position: relative;
+    width: 130px; height: 130px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto;
+  }
+
+  /* Pulse ring for cam2 */
+  .pulse-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(204,68,255,0.5);
+    width: 30px; height: 30px;
+    animation: pulseExpand 2s ease-out infinite;
+  }
+  .pulse-ring:nth-child(2) { animation-delay: 0.7s; }
+  .pulse-ring:nth-child(3) { animation-delay: 1.4s; }
+  @keyframes pulseExpand {
+    0% { transform: scale(1); opacity: 0.8; }
+    100% { transform: scale(4.5); opacity: 0; }
+  }
+
+  /* Thermal color-tinted cam overlay */
+  .thermal-tint {
+    position: absolute; inset: 0;
+    background: linear-gradient(
+      135deg,
+      rgba(204,68,255,0.04) 0%,
+      transparent 50%,
+      rgba(0,212,255,0.04) 100%
+    );
+    pointer-events: none;
+    z-index: 6;
+    mix-blend-mode: overlay;
+  }
+
+  /* Crosshair */
+  .crosshair {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px; height: 40px;
+    z-index: 6;
+    pointer-events: none;
+    opacity: 0.4;
+  }
+  .crosshair::before,
+  .crosshair::after {
+    content: '';
+    position: absolute;
+    background: var(--purple);
+  }
+  .crosshair::before {
+    width: 100%; height: 1px;
+    top: 50%; left: 0;
+    box-shadow: 0 0 4px var(--purple);
+  }
+  .crosshair::after {
+    height: 100%; width: 1px;
+    left: 50%; top: 0;
+    box-shadow: 0 0 4px var(--purple);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="particleCanvas"></canvas>
+<div id="alertFlash"></div>
+
+<div id="alertPopup">
+  <div class="popup-icon">🚨</div>
+  <div class="popup-title">⚠ SUSPICIOUS ACTIVITY DETECTED ⚠</div>
+  <div class="popup-sub">ALERT SENT TO POLICE CONTROL SYSTEM</div>
+  <div class="popup-detail">
+    CAMERA NODE: 02 &nbsp;|&nbsp; LOCATION: STREET LIGHT AREA 2<br>
+    GPS: 13.0850°N, 80.2750°E<br>
+    TIME: <span id="popupTime">--:--:--</span><br>
+    STATUS: EMERGENCY RESPONSE DISPATCHED
+  </div>
+  <button class="popup-close" onclick="dismissAlert()">ACKNOWLEDGE ALERT</button>
+</div>
+
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-block">
+      <div class="logo-icon">HA</div>
+      <div class="logo-text">
+        <h1>HER ALERT</h1>
+        <p>AI WOMEN SAFETY SURVEILLANCE SYSTEM</p>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="cam-node-id">CAMERA NODE 02</div>
+      <div class="cam-location">◉ STREET LIGHT AREA 2 &nbsp;|&nbsp; GPS: 13.0850°N, 80.2750°E</div>
+    </div>
+
+    <div class="header-right">
+      <div id="liveTime">--:--:--</div>
+      <div id="liveDate">-- --- ----</div>
+      <div class="ai-status-badge">◉ AI MONITORING ACTIVE</div>
+      <div class="emergency-signal">
+        <div class="signal-dot"></div>
+        CONNECTED TO CENTRAL NETWORK
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <div class="main-grid">
+
+    <!-- LEFT PANEL -->
+    <div style="display:flex;flex-direction:column;gap:8px;">
+
+      <!-- Camera Info -->
+      <div class="panel">
+        <div class="panel-title">CAMERA INFORMATION</div>
+        <div class="info-row"><span class="info-label">CAM ID</span><span class="info-value">CAM-NODE-02</span></div>
+        <div class="info-row"><span class="info-label">LOCATION</span><span class="info-value" style="font-size:8px;">STR AREA 2</span></div>
+        <div class="info-row"><span class="info-label">LAT</span><span class="info-value gps-val">13.0850°N</span></div>
+        <div class="info-row"><span class="info-label">LON</span><span class="info-value gps-val">80.2750°E</span></div>
+        <div class="info-row">
+          <span class="info-label">NETWORK</span>
+          <span class="info-value green"><span class="status-dot green"></span>ONLINE</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">AI ENGINE</span>
+          <span class="info-value" style="color:var(--purple);"><span class="status-dot purple"></span>ACTIVE</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">MOTION</span>
+          <span class="info-value" id="motionStatusVal"><span class="status-dot green"></span>CLEAR</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">RECORDING</span>
+          <span class="info-value red"><span class="status-dot red"></span>REC</span>
+        </div>
+        <div class="info-row"><span class="info-label">DETECTIONS</span><span class="info-value blue" id="detectionCounter">0</span></div>
+        <div class="info-row">
+          <span class="info-label">POWER</span>
+          <span class="info-value green">■■■■■ 100%</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">SIGNAL</span>
+          <span>
+            <div class="signal-bars">
+              <div class="sig-bar" style="height:4px;"></div>
+              <div class="sig-bar" style="height:6px;"></div>
+              <div class="sig-bar" style="height:9px;"></div>
+              <div class="sig-bar" style="height:12px;"></div>
+              <div class="sig-bar" style="height:16px;"></div>
+            </div>
+          </span>
+        </div>
+        <div class="info-row"><span class="info-label">IR MODE</span><span class="info-value" style="color:var(--yellow);">STANDBY</span></div>
+        <div class="info-row"><span class="info-label">PROTOCOL</span><span class="info-value blue" style="font-size:8px;">TLS-AES256</span></div>
+      </div>
+
+      <!-- Pulse Radar -->
+      <div class="panel" style="text-align:center;">
+        <div class="panel-title">THREAT MONITOR</div>
+        <div class="hex-radar">
+          <div class="pulse-ring"></div>
+          <div class="pulse-ring"></div>
+          <div class="pulse-ring"></div>
+          <svg width="130" height="130" viewBox="0 0 130 130">
+            <!-- Hex rings -->
+            <polygon points="65,10 112,37.5 112,92.5 65,120 18,92.5 18,37.5" fill="none" stroke="rgba(204,68,255,0.15)" stroke-width="1"/>
+            <polygon points="65,28 96,45.5 96,80.5 65,98 34,80.5 34,45.5" fill="none" stroke="rgba(204,68,255,0.12)" stroke-width="1"/>
+            <polygon points="65,44 80,53 80,71 65,80 50,71 50,53" fill="none" stroke="rgba(204,68,255,0.1)" stroke-width="1"/>
+            <line x1="65" y1="10" x2="65" y2="120" stroke="rgba(204,68,255,0.08)" stroke-width="1"/>
+            <line x1="18" y1="37.5" x2="112" y2="92.5" stroke="rgba(204,68,255,0.08)" stroke-width="1"/>
+            <line x1="112" y1="37.5" x2="18" y2="92.5" stroke="rgba(204,68,255,0.08)" stroke-width="1"/>
+            <!-- Sweep -->
+            <line x1="65" y1="65" x2="112" y2="37.5" stroke="rgba(204,68,255,0.6)" stroke-width="1.5" style="transform-origin:65px 65px;animation:radarSweep 4s linear infinite;"/>
+            <defs>
+              <radialGradient id="sweepGrad2" cx="100%" cy="50%" r="100%">
+                <stop offset="0%" stop-color="rgba(204,68,255,0.35)"/>
+                <stop offset="100%" stop-color="transparent"/>
+              </radialGradient>
+            </defs>
+            <path d="M65,65 L112,37.5 A55,55 0 0,1 65,10 Z" fill="url(#sweepGrad2)" style="transform-origin:65px 65px;animation:radarSweep 4s linear infinite;" opacity="0.5"/>
+            <!-- Blips -->
+            <circle cx="90" cy="35" r="3" fill="var(--yellow)" opacity="0.7" style="animation:signalBlink 2.5s infinite;"/>
+            <circle cx="38" cy="85" r="2" fill="var(--green)" opacity="0.8" style="animation:signalBlink 1.8s infinite;"/>
+            <circle cx="70" cy="90" r="2.5" fill="var(--purple)" opacity="0.9" style="animation:signalBlink 3s infinite;"/>
+          </svg>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:8px;color:rgba(176,160,200,0.4);letter-spacing:1px;">ZONE 2 ACTIVE SCAN</div>
+      </div>
+
+    </div>
+
+    <!-- CENTER: CAMERA -->
+    <div class="camera-section">
+      <div class="cam-frame" id="camFrame">
+        <div id="loadingOverlay">
+          <div class="loading-ring"></div>
+          <div class="loading-text">INITIALIZING CAMERA...</div>
+          <div style="font-family:var(--font-mono);font-size:8px;color:rgba(204,68,255,0.5);letter-spacing:2px;">SECURING UPLINK NODE-02</div>
+        </div>
+        <video id="videoEl" autoplay muted playsinline></video>
+        <canvas id="motionCanvas"></canvas>
+        <div class="scanline-overlay"></div>
+        <div class="ai-scanline"></div>
+        <div class="ai-scanline2"></div>
+        <div class="thermal-overlay"></div>
+        <div class="thermal-tint"></div>
+        <div class="crosshair"></div>
+        <div class="corner-br"></div>
+        <div class="corner-bl"></div>
+        <div class="alert-border" id="alertBorder"></div>
+        <div id="motionWarning"></div>
+
+        <div class="cam-hud-tl">
+          CAM: NODE-02<br>
+          RES: 1920×1080<br>
+          FPS: <span id="fpsVal">30</span>
+        </div>
+        <div class="cam-hud-tr">
+          ZOOM: 1.2x<br>
+          IR: <span style="color:var(--yellow)">STBY</span><br>
+          AI: <span style="color:var(--green);">ON</span>
+        </div>
+        <div class="cam-hud-bl">
+          <div class="rec-dot"></div>
+          <span id="camStatus">CAMERA ACTIVE</span>
+        </div>
+        <div class="cam-hud-br">
+          <div class="rec-dot"></div>
+          REC &nbsp;<span id="recTimer">00:00:00</span>
+        </div>
+      </div>
+
+      <!-- REC BAR -->
+      <div class="rec-bar">
+        <div class="rec-label"><div class="rec-dot"></div> REC</div>
+        <div class="rec-item"><span>RUNTIME</span> &nbsp;<span class="val" id="recTimer2">00:00:00</span></div>
+        <div class="rec-item">
+          <span>STORAGE</span>
+          <div class="storage-bar"><div class="storage-fill"></div></div>
+          <span class="val">51%</span>
+        </div>
+        <div class="rec-item">
+          <span>AI SCAN</span>
+          <div class="ai-scan-bar"><div class="ai-scan-fill"></div></div>
+        </div>
+        <div class="rec-item"><span>CODEC</span> &nbsp;<span class="val">H.265</span></div>
+        <div class="rec-item"><span>BITRATE</span> &nbsp;<span class="val" id="bitrateVal">5.1</span> Mbps</div>
+      </div>
+
+      <!-- LOG PANEL -->
+      <div class="panel" style="flex:1;">
+        <div class="panel-title">INCIDENT LOG – NODE 02</div>
+        <div class="log-scroll" id="logScroll"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="panel">
+        <div class="panel-title">AI ANALYSIS</div>
+        <div class="ai-cards">
+          <div class="ai-card">
+            <div class="ai-card-label">HUMAN COUNT</div>
+            <div class="ai-card-value" id="humanCount" style="color:var(--purple);text-shadow:0 0 10px rgba(204,68,255,0.6)">0</div>
+            <div class="ai-card-bar"><div class="ai-card-bar-fill" id="humanCountBar" style="width:0%"></div></div>
+          </div>
+          <div class="ai-card">
+            <div class="ai-card-label">THREAT LEVEL</div>
+            <div class="ai-card-value threat-low" id="threatLevel">LOW</div>
+            <div class="ai-card-bar"><div class="ai-card-bar-fill" id="threatBar" style="width:10%;background:linear-gradient(90deg,#005500,#00ff88)"></div></div>
+          </div>
+          <div class="ai-card">
+            <div class="ai-card-label">MOTION INTENSITY</div>
+            <div class="ai-card-value" id="motionIntensity" style="color:var(--purple);">0%</div>
+            <div class="ai-card-bar"><div class="ai-card-bar-fill" id="motionBar" style="width:0%"></div></div>
+          </div>
+          <div class="ai-card">
+            <div class="ai-card-label">AI CONFIDENCE</div>
+            <div class="ai-card-value" id="aiConfidence" style="color:var(--blue);">97.6%</div>
+            <div class="ai-card-bar"><div class="ai-card-bar-fill" id="confBar" style="width:97%;background:linear-gradient(90deg,var(--blue2),var(--blue))"></div></div>
+          </div>
+          <div class="ai-card">
+            <div class="ai-card-label">ACTIVITY STATUS</div>
+            <div class="ai-card-value threat-low" id="activityStatus">NORMAL</div>
+          </div>
+          <div class="ai-card">
+            <div class="ai-card-label">GENDER DETECTION</div>
+            <div class="ai-card-value" id="genderDetected" style="font-size:12px;color:var(--purple);">SCANNING...</div>
+          </div>
+          <div class="ai-card">
+            <div class="ai-card-label">ZONE COVERAGE</div>
+            <div class="ai-card-value" style="font-size:13px;color:var(--blue);">15m × 10m</div>
+            <div class="ai-card-bar"><div class="ai-card-bar-fill" style="width:90%;background:linear-gradient(90deg,var(--blue2),var(--blue))"></div></div>
+          </div>
+          <div class="ai-card">
+            <div class="ai-card-label">NIGHT VISION</div>
+            <div class="ai-card-value" id="nightVision" style="font-size:12px;color:var(--yellow);">STANDBY</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-item"><div class="dot"></div> AI ENGINE ACTIVE</div>
+    <div class="footer-item"><div class="dot"></div> HER ALERT SURVEILLANCE SYSTEM v2.4.1</div>
+    <div class="footer-item"><div class="dot"></div> REAL-TIME MONITORING ENABLED</div>
+    <div class="footer-item"><div class="dot"></div> CONNECTED TO CENTRAL POLICE NETWORK</div>
+    <div class="footer-item"><div class="dot"></div> NODE-02 | UPTIME: <span id="uptimeVal" style="color:var(--purple);margin-left:3px;">00:00:00</span></div>
+  </footer>
+
+</div>
+
+<style>
+  @keyframes radarSweep {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+</style>
+
+<script>
+// ============================================================
+// HER ALERT – CAMERA NODE 02
+// ============================================================
+
+const state = {
+  motionDetected: false,
+  suspiciousDetected: false,
+  motionFrames: 0,
+  detectionCount: 0,
+  recSeconds: 0,
+  alertActive: false,
+  alertCooldown: false,
+  previousFrame: null,
+};
+
+// ---- CLOCK ----
+function updateClock() {
+  const now = new Date();
+  document.getElementById('liveTime').textContent = now.toLocaleTimeString('en-US', {hour12: false});
+  const d = now.toLocaleDateString('en-US', {day:'2-digit', month:'short', year:'numeric'}).toUpperCase();
+  document.getElementById('liveDate').textContent = d;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ---- REC TIMER ----
+setInterval(() => {
+  state.recSeconds++;
+  const h = String(Math.floor(state.recSeconds / 3600)).padStart(2,'0');
+  const m = String(Math.floor((state.recSeconds % 3600) / 60)).padStart(2,'0');
+  const s = String(state.recSeconds % 60).padStart(2,'0');
+  const t = `${h}:${m}:${s}`;
+  document.getElementById('recTimer').textContent = t;
+  document.getElementById('recTimer2').textContent = t;
+  document.getElementById('uptimeVal').textContent = t;
+}, 1000);
+
+// ---- BITRATE ANIMATION ----
+setInterval(() => {
+  document.getElementById('bitrateVal').textContent = (4.5 + Math.random() * 1.2).toFixed(1);
+  document.getElementById('fpsVal').textContent = Math.floor(27 + Math.random() * 5);
+}, 2200);
+
+// Night vision simulation
+setInterval(() => {
+  const hour = new Date().getHours();
+  const nv = document.getElementById('nightVision');
+  if (hour >= 20 || hour < 6) {
+    nv.textContent = 'ACTIVE';
+    nv.style.color = 'var(--green)';
+  } else {
+    nv.textContent = 'STANDBY';
+    nv.style.color = 'var(--yellow)';
+  }
+}, 5000);
+
+// ---- PARTICLES ----
+const canvas = document.getElementById('particleCanvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+for (let i = 0; i < 70; i++) {
+  particles.push({
+    x: Math.random() * window.innerWidth,
+    y: Math.random() * window.innerHeight,
+    vx: (Math.random() - 0.5) * 0.25,
+    vy: (Math.random() - 0.5) * 0.25,
+    size: Math.random() * 1.8,
+    alpha: Math.random() * 0.4 + 0.1,
+    color: Math.random() > 0.5 ? '204,68,255' : '0,212,255',
+  });
+}
+
+function drawParticles() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles.forEach(p => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${p.color},${p.alpha})`;
+    ctx.fill();
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+    if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+  });
+  requestAnimationFrame(drawParticles);
+}
+drawParticles();
+
+// ---- WEBCAM ----
+const videoEl = document.getElementById('videoEl');
+const motionCanvas = document.getElementById('motionCanvas');
+const mCtx = motionCanvas.getContext('2d');
+
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: false });
+    videoEl.srcObject = stream;
+    videoEl.onloadedmetadata = () => {
+      document.getElementById('loadingOverlay').style.display = 'none';
+      document.getElementById('camStatus').textContent = 'CAMERA ACTIVE';
+      addLog('Camera feed established – Node 02', 'ok');
+      addLog('AI surveillance engine started', 'info');
+      addLog('Zone 2 perimeter monitoring active', 'info');
+      startMotionDetection();
+    };
+  } catch(e) {
+    const lo = document.getElementById('loadingOverlay');
+    lo.querySelector('.loading-text').textContent = 'CAMERA ACCESS DENIED';
+    lo.querySelector('.loading-text').style.color = 'var(--red)';
+    addLog('Camera access error: ' + e.message, 'alert');
+  }
+}
+
+startCamera();
+
+// ---- MOTION DETECTION ----
+function startMotionDetection() {
+  setInterval(checkMotion, 500);
+}
+
+function checkMotion() {
+  if (!videoEl.videoWidth) return;
+  motionCanvas.width = videoEl.videoWidth;
+  motionCanvas.height = videoEl.videoHeight;
+  mCtx.drawImage(videoEl, 0, 0, motionCanvas.width, motionCanvas.height);
+  const frame = mCtx.getImageData(0, 0, motionCanvas.width, motionCanvas.height);
+  mCtx.clearRect(0, 0, motionCanvas.width, motionCanvas.height);
+
+  if (!state.previousFrame) {
+    state.previousFrame = frame;
+    return;
+  }
+
+  let diff = 0;
+  const data = frame.data;
+  const prev = state.previousFrame.data;
+  const step = 8;
+  let total = 0;
+
+  for (let i = 0; i < data.length; i += 4 * step) {
+    const rDiff = Math.abs(data[i] - prev[i]);
+    const gDiff = Math.abs(data[i+1] - prev[i+1]);
+    const bDiff = Math.abs(data[i+2] - prev[i+2]);
+    if (rDiff + gDiff + bDiff > 50) diff++;
+    total++;
+  }
+
+  state.previousFrame = frame;
+  const motionPct = Math.round((diff / total) * 100);
+
+  const simHumans = motionPct > 3 ? Math.min(6, 1 + Math.floor(motionPct / 8)) : 0;
+  const simConfidence = (94 + Math.random() * 5).toFixed(1);
+  document.getElementById('humanCount').textContent = simHumans;
+  document.getElementById('humanCountBar').style.width = Math.min(100, simHumans * 16) + '%';
+  document.getElementById('aiConfidence').textContent = simConfidence + '%';
+  document.getElementById('confBar').style.width = simConfidence + '%';
+  document.getElementById('motionIntensity').textContent = motionPct + '%';
+  document.getElementById('motionBar').style.width = Math.min(100, motionPct * 3) + '%';
+
+  // Gender detection simulation
+  if (motionPct > 5) {
+    const genders = ['FEMALE DETECTED', 'MALE DETECTED', 'MULTIPLE'];
+    document.getElementById('genderDetected').textContent = genders[Math.floor(Math.random() * genders.length)];
+    document.getElementById('genderDetected').style.color = 'var(--yellow)';
+  } else {
+    document.getElementById('genderDetected').textContent = 'SCANNING...';
+    document.getElementById('genderDetected').style.color = 'var(--purple)';
+  }
+
+  if (motionPct > 3) {
+    handleMotion(motionPct);
+  } else {
+    clearMotion();
+  }
+}
+
+function handleMotion(pct) {
+  if (!state.motionDetected) {
+    state.motionDetected = true;
+    state.detectionCount++;
+    document.getElementById('detectionCounter').textContent = state.detectionCount;
+    addLog('Motion detected – zone 2 – intensity ' + pct + '%', 'motion');
+    document.getElementById('motionStatusVal').innerHTML = '<span class="status-dot yellow"></span><span style="color:var(--yellow)">MOTION</span>';
+    document.getElementById('motionWarning').style.display = 'block';
+
+    document.getElementById('threatLevel').textContent = 'MEDIUM';
+    document.getElementById('threatLevel').className = 'ai-card-value threat-med';
+    document.getElementById('threatBar').style.cssText = 'width:55%;background:linear-gradient(90deg,#554400,#ffcc00)';
+    document.getElementById('activityStatus').textContent = 'MOTION';
+    document.getElementById('activityStatus').className = 'ai-card-value threat-med';
+  }
+
+  state.motionFrames++;
+
+  if (state.motionFrames > 10 && !state.alertActive && !state.alertCooldown) {
+    triggerSuspiciousAlert();
+  }
+}
+
+function clearMotion() {
+  if (state.motionDetected) {
+    state.motionDetected = false;
+    state.motionFrames = 0;
+    document.getElementById('motionStatusVal').innerHTML = '<span class="status-dot green"></span><span style="color:var(--green)">CLEAR</span>';
+    document.getElementById('motionWarning').style.display = 'none';
+    if (!state.alertActive) {
+      document.getElementById('threatLevel').textContent = 'LOW';
+      document.getElementById('threatLevel').className = 'ai-card-value threat-low';
+      document.getElementById('threatBar').style.cssText = 'width:10%;background:linear-gradient(90deg,#005500,#00ff88)';
+      document.getElementById('activityStatus').textContent = 'NORMAL';
+      document.getElementById('activityStatus').className = 'ai-card-value threat-low';
+    }
+  }
+}
+
+function triggerSuspiciousAlert() {
+  if (state.alertActive) return;
+  state.alertActive = true;
+  state.motionFrames = 0;
+
+  addLog('⚠ SUSPICIOUS ACTIVITY – ZONE 2 – ALERTING POLICE', 'alert');
+  addLog('Emergency signal transmitted – Node 02', 'alert');
+  addLog('Evidence frame captured and stored', 'alert');
+
+  document.getElementById('alertFlash').style.display = 'block';
+  document.getElementById('alertBorder').style.display = 'block';
+  document.getElementById('motionWarning').style.display = 'none';
+
+  document.getElementById('threatLevel').textContent = 'HIGH';
+  document.getElementById('threatLevel').className = 'ai-card-value threat-high';
+  document.getElementById('threatBar').style.cssText = 'width:100%;background:linear-gradient(90deg,#880000,#ff2244)';
+  document.getElementById('activityStatus').textContent = 'SUSPICIOUS';
+  document.getElementById('activityStatus').className = 'ai-card-value threat-high';
+
+  document.body.classList.add('shaking');
+  setTimeout(() => document.body.classList.remove('shaking'), 600);
+
+  document.getElementById('popupTime').textContent = new Date().toLocaleTimeString('en-US', {hour12: false});
+  document.getElementById('alertPopup').style.display = 'block';
+
+  state.alertCooldown = true;
+  setTimeout(() => { state.alertCooldown = false; }, 30000);
+}
+
+window.dismissAlert = function() {
+  state.alertActive = false;
+  document.getElementById('alertPopup').style.display = 'none';
+  document.getElementById('alertFlash').style.display = 'none';
+  document.getElementById('alertBorder').style.display = 'none';
+  addLog('Alert acknowledged – Node 02 operator', 'info');
+  document.getElementById('threatLevel').textContent = 'LOW';
+  document.getElementById('threatLevel').className = 'ai-card-value threat-low';
+  document.getElementById('threatBar').style.cssText = 'width:10%;background:linear-gradient(90deg,#005500,#00ff88)';
+  document.getElementById('activityStatus').textContent = 'NORMAL';
+  document.getElementById('activityStatus').className = 'ai-card-value threat-low';
+};
+
+// ---- LOG ----
+function addLog(msg, type = 'info') {
+  const logScroll = document.getElementById('logScroll');
+  const now = new Date().toLocaleTimeString('en-US', {hour12: false});
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="log-time">[${now}]</span><span class="log-msg ${type}">${msg}</span>`;
+  logScroll.insertBefore(entry, logScroll.firstChild);
+  while (logScroll.children.length > 50) logScroll.removeChild(logScroll.lastChild);
+}
+
+// Initial logs
+addLog('System initialized – HER ALERT v2.4.1', 'ok');
+addLog('Camera Node 02 online – Area 2', 'ok');
+addLog('AI surveillance engine loaded', 'info');
+addLog('Zone 2 threat model calibrated', 'info');
+setTimeout(() => addLog('Connected to central police network', 'ok'), 2500);
+setTimeout(() => addLog('Sync established with Camera Node 01', 'ok'), 4000);
+
+// ---- AI SIM UPDATES ----
+setInterval(() => {
+  if (!state.alertActive && !state.motionDetected) {
+    const conf = (94 + Math.random() * 5).toFixed(1);
+    document.getElementById('aiConfidence').textContent = conf + '%';
+    document.getElementById('confBar').style.width = conf + '%';
+  }
+}, 3500);
+// ---- SOCKET.IO + WEBRTC ----
+
+</script>
+<script>
+const socket = io();
+
+const NODE_ID = "NODE_2";
+
+let localStream;
+let peer;
+
+async function startCamera() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: false
+    });
+
+    const video = document.querySelector("video");
+
+    if (video) {
+      video.srcObject = localStream;
+      video.play();
+    }
+
+    socket.emit("register-camera", {
+      nodeId: NODE_ID,
+      location: "AREA_2"
+    });
+
+    console.log("camera started");
+
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+socket.on("connect", () => {
+  console.log("socket connected");
+  startCamera();
+});
+
+socket.on("answer", async ({ answer }) => {
+  await peer.setRemoteDescription(
+    new RTCSessionDescription(answer)
+  );
+});
+
+socket.on("ice-candidate", async ({ candidate }) => {
+  if (peer) {
+    await peer.addIceCandidate(
+      new RTCIceCandidate(candidate)
+    );
+  }
+});
+
+async function createOffer() {
+
+  peer = new RTCPeerConnection({
+    iceServers: [
+      {
+        urls: "stun:stun.l.google.com:19302"
+      }
+    ]
+  });
+
+  localStream.getTracks().forEach(track => {
+    peer.addTrack(track, localStream);
+  });
+
+  peer.onicecandidate = (event) => {
+    if (event.candidate) {
+      socket.emit("ice-candidate", {
+        nodeId: NODE_ID,
+        candidate: event.candidate,
+        target: "dashboard"
+      });
+    }
+  };
+
+  const offer = await peer.createOffer();
+
+  await peer.setLocalDescription(offer);
+
+  socket.emit("offer", {
+    nodeId: NODE_ID,
+    offer
+  });
+
+  console.log("offer sent");
+}
+
+setTimeout(() => {
+  createOffer();
+}, 3000);
+</script>
+</body>
+</html>

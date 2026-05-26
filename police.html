@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- ADD THIS INSTEAD -->
 <script src="/socket.io/socket.io.js"></script>
 <title>HER ALERT – Central Police Control System</title>
 <style>
@@ -1042,94 +1043,32 @@ function drawMap(){
 drawMap();
 
 
-// ─── SOCKET.IO + WEBRTC ───
-const socket = io();
-const peerConnections = {};
 
-socket.on('connect', () => {
-  addLog('Connected to HER ALERT server', 'ok');
-  socket.emit('register-dashboard');
-});
+// ─── MOTION DETECTION ───
+const mcanvas=document.createElement('canvas');
+const mctx=mcanvas.getContext('2d');
 
-socket.on('disconnect', () => {
-  addLog('Server connection lost', 'alert-l');
-});
-
-socket.on('camera-connected', (data) => {
-  addLog(`Camera Node 0${data.nodeId} online — ${data.location}`, 'ok');
-  document.getElementById(`camStatus${data.nodeId}`).textContent = 'ACTIVE';
-  const loadEl = document.getElementById(`camLoading${data.nodeId}`);
-  if (loadEl) loadEl.querySelector('.cam-loading-txt').textContent = 'CONNECTING...';
-});
-
-socket.on('camera-disconnected', (data) => {
-  addLog(`Camera Node 0${data.nodeId} went offline`, 'warn');
-  const v = document.getElementById('video' + data.nodeId);
-  if (v) v.srcObject = null;
-  document.getElementById(`camStatus${data.nodeId}`).textContent = 'OFFLINE';
-  const loadEl = document.getElementById(`camLoading${data.nodeId}`);
-  if (loadEl) {
-    loadEl.style.display = 'flex';
-    loadEl.querySelector('.cam-loading-txt').textContent = 'OFFLINE';
-    loadEl.querySelector('.cam-loading-txt').style.color = 'var(--red)';
-  }
-});
-
-socket.on('offer', async ({ nodeId, fromSocketId, offer }) => {
-  addLog(`Stream offer from Node 0${nodeId}`, 'info');
-  const pc = new RTCPeerConnection({
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-  });
-  peerConnections[nodeId] = pc;
-
-  pc.ontrack = ({ streams }) => {
-    const v = document.getElementById('video' + nodeId);
-    if (v) {
-      v.srcObject = streams[0];
-      v.onloadedmetadata = () => {
-        const loadEl = document.getElementById('camLoading' + nodeId);
-        if (loadEl) loadEl.style.display = 'none';
-        document.getElementById('camStatus' + nodeId).textContent = 'ACTIVE';
-        addLog(`Node 0${nodeId} live feed active`, 'ok');
-      };
+function startMotionDetection(){
+  setInterval(()=>{
+    const v=document.getElementById('video1');
+    if(!v.videoWidth) return;
+    mcanvas.width=v.videoWidth;mcanvas.height=v.videoHeight;
+    mctx.drawImage(v,0,0,mcanvas.width,mcanvas.height);
+    const frame=mctx.getImageData(0,0,mcanvas.width,mcanvas.height);
+    mctx.clearRect(0,0,mcanvas.width,mcanvas.height);
+    if(!sys.prevFrame1){sys.prevFrame1=frame;return;}
+    let diff=0,total=0;
+    const d=frame.data,p=sys.prevFrame1.data,step=10;
+    for(let i=0;i<d.length;i+=4*step){
+      if(Math.abs(d[i]-p[i])+Math.abs(d[i+1]-p[i+1])+Math.abs(d[i+2]-p[i+2])>45)diff++;
+      total++;
     }
-  };
+    sys.prevFrame1=frame;
+    const pct=Math.round((diff/total)*100);
+    handleMotion(pct);
+  },600);
+}
 
-  pc.onicecandidate = ({ candidate }) => {
-    if (candidate) {
-      socket.emit('ice-candidate', {
-        nodeId, candidate,
-        target: 'camera',
-        targetSocketId: fromSocketId
-      });
-    }
-  };
-
-  await pc.setRemoteDescription(new RTCSessionDescription(offer));
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-  socket.emit('answer', { nodeId, answer, targetSocketId: fromSocketId });
-  addLog(`Answer sent to Node 0${nodeId}`, 'info');
-});
-
-socket.on('ice-candidate', ({ nodeId, candidate }) => {
-  const pc = peerConnections[nodeId];
-  if (pc && candidate) pc.addIceCandidate(new RTCIceCandidate(candidate));
-});
-
-socket.on('alert-triggered', (data) => {
-  triggerEmergency(parseInt(data.nodeId));
-});
-
-socket.on('motion-update', (data) => {
-  const n = data.nodeId;
-  if (n === '1') {
-    document.getElementById('motion1Bar').style.width = Math.min(100, data.motionPct * 4) + '%';
-    handleMotion(data.motionPct);
-  } else if (n === '2') {
-    document.getElementById('motion2Bar').style.width = Math.min(100, data.motionPct * 4) + '%';
-  }
-});
 function handleMotion(pct){
   sys.motionNode1=pct;
   document.getElementById('motion1Bar').style.width=Math.min(100,pct*4)+'%';
@@ -1380,6 +1319,78 @@ setTimeout(()=>{
   document.getElementById('alertTime3').textContent=new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit'});
 },1500);
 
+</script>
+<script>
+const socket = io();
+
+const peers = {};
+
+socket.emit("register-dashboard");
+
+socket.on("offer", async ({ nodeId, offer }) => {
+
+  const peer = new RTCPeerConnection({
+    iceServers: [
+      {
+        urls: "stun:stun.l.google.com:19302"
+      }
+    ]
+  });
+
+  peers[nodeId] = peer;
+
+  peer.ontrack = (event) => {
+
+    const stream = event.streams[0];
+
+    let video;
+
+    if (nodeId === "NODE_1") {
+      video = document.getElementById("video1");
+    } else {
+      video = document.getElementById("video2");
+    }
+
+    if (video) {
+      video.srcObject = stream;
+      video.play();
+    }
+  };
+
+  peer.onicecandidate = (event) => {
+    if (event.candidate) {
+      socket.emit("ice-candidate", {
+        nodeId,
+        candidate: event.candidate,
+        target: "camera"
+      });
+    }
+  };
+
+  await peer.setRemoteDescription(
+    new RTCSessionDescription(offer)
+  );
+
+  const answer = await peer.createAnswer();
+
+  await peer.setLocalDescription(answer);
+
+  socket.emit("answer", {
+    nodeId,
+    answer
+  });
+
+  console.log("connected to", nodeId);
+});
+
+socket.on("ice-candidate", async ({ nodeId, candidate }) => {
+
+  if (peers[nodeId]) {
+    await peers[nodeId].addIceCandidate(
+      new RTCIceCandidate(candidate)
+    );
+  }
+});
 </script>
 </body>
 </html>
