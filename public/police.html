@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- ADD THIS INSTEAD -->
+<script src="/socket.io/socket.io.js"></script>
+<title>HER ALERT – Central Police Control System</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg: #010308;
+  --bg2: #020510;
+  --panel: rgba(0,15,35,0.88);
+  --panel2: rgba(5,5,20,0.92);
+  --blue: #00d4ff;
+  --blue2: #0066aa;
+  --blue3: #003366;
+  --red: #ff2244;
+  --red2: #cc0022;
+  --red3: #440011;
+  --yellow: #ffcc00;
+  --green: #00ff88;
+  --orange: #ff8800;
+  --purple: #cc44ff;
+  --border: rgba(0,212,255,0.2);
+  --border-bright: rgba(0,212,255,0.5);
+  --text: #8ab8d0;
+  --text2: rgba(138,184,208,0.5);
+  --font-mono: 'Share Tech Mono', monospace;
+  --font-hud: 'Orbitron', monospace;
+  --font-body: 'Rajdhani', sans-serif;
+  --glow-blue: 0 0 15px rgba(0,212,255,0.5);
+  --glow-red: 0 0 15px rgba(255,34,68,0.6);
+  --glow-green: 0 0 10px rgba(0,255,136,0.5);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+
+html,body{width:100%;height:100%;overflow:hidden;}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  position: relative;
+}
+
+/* ─── BACKGROUND LAYERS ─── */
+#bgCanvas{position:fixed;inset:0;z-index:0;pointer-events:none;}
+
+body::before {
+  content:'';
+  position:fixed;inset:0;z-index:1;
+  background-image:
+    linear-gradient(rgba(0,212,255,0.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,255,0.025) 1px,transparent 1px);
+  background-size:50px 50px;
+  pointer-events:none;
+}
+
+body::after {
+  content:'';
+  position:fixed;inset:0;z-index:1;
+  background:
+    radial-gradient(ellipse at 10% 90%, rgba(0,212,255,0.05) 0%,transparent 40%),
+    radial-gradient(ellipse at 90% 10%, rgba(255,34,68,0.04) 0%,transparent 40%),
+    radial-gradient(ellipse at 50% 50%, rgba(0,100,180,0.04) 0%,transparent 60%);
+  pointer-events:none;
+}
+
+/* ─── ALERT FLASH OVERLAY ─── */
+#alertFlash{
+  position:fixed;inset:0;z-index:900;
+  background:rgba(255,34,68,0.12);
+  display:none;pointer-events:none;
+  animation:flashPulse 0.5s ease-in-out infinite;
+}
+@keyframes flashPulse{0%,100%{opacity:0;}50%{opacity:1;}}
+
+#alertFlashBorder{
+  position:fixed;inset:0;z-index:901;
+  border:3px solid var(--red);
+  box-shadow:0 0 40px rgba(255,34,68,0.6),inset 0 0 40px rgba(255,34,68,0.1);
+  display:none;pointer-events:none;
+  animation:borderGlow 0.5s ease-in-out infinite;
+}
+@keyframes borderGlow{
+  0%,100%{box-shadow:0 0 40px rgba(255,34,68,0.6),inset 0 0 40px rgba(255,34,68,0.1);}
+  50%{box-shadow:0 0 80px rgba(255,34,68,1),inset 0 0 80px rgba(255,34,68,0.3);}
+}
+
+/* ─── MAIN WRAPPER ─── */
+#app{
+  position:relative;z-index:2;
+  display:grid;
+  grid-template-rows:64px 1fr 48px;
+  height:100vh;
+  padding:6px;
+  gap:6px;
+}
+
+/* ═══════════════════════════════════════
+   HEADER
+═══════════════════════════════════════ */
+header{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-top:2px solid var(--blue);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;gap:10px;
+  backdrop-filter:blur(12px);
+  box-shadow:0 0 30px rgba(0,212,255,0.08),inset 0 -1px 0 rgba(0,212,255,0.1);
+  position:relative;overflow:hidden;
+}
+header::before{
+  content:'';position:absolute;left:0;right:0;bottom:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--blue),transparent);
+  opacity:0.4;
+}
+
+.logo-wrap{display:flex;align-items:center;gap:10px;}
+.logo-circle{
+  width:40px;height:40px;border-radius:50%;
+  border:2px solid var(--red);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-hud);font-size:11px;font-weight:900;color:var(--red);
+  box-shadow:var(--glow-red);
+  animation:logoPulse 2s ease-in-out infinite;
+  flex-shrink:0;
+}
+@keyframes logoPulse{
+  0%,100%{box-shadow:var(--glow-red);}
+  50%{box-shadow:0 0 30px rgba(255,34,68,0.9);}
+}
+.logo-text-h{font-family:var(--font-hud);font-size:16px;font-weight:900;color:var(--red);letter-spacing:3px;text-shadow:0 0 12px rgba(255,34,68,0.7);line-height:1;}
+.logo-text-s{font-family:var(--font-mono);font-size:8px;color:var(--blue);letter-spacing:2px;margin-top:2px;}
+
+.header-center{text-align:center;display:flex;flex-direction:column;align-items:center;gap:2px;}
+#mainClock{font-family:var(--font-hud);font-size:22px;font-weight:700;color:var(--blue);text-shadow:0 0 15px rgba(0,212,255,0.8);line-height:1;}
+#mainDate{font-family:var(--font-mono);font-size:9px;color:var(--text2);letter-spacing:2px;}
+.live-badge{
+  display:flex;align-items:center;gap:5px;
+  font-family:var(--font-mono);font-size:8px;color:var(--green);letter-spacing:2px;
+  border:1px solid rgba(0,255,136,0.3);padding:1px 6px;
+}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:var(--glow-green);animation:blink 1s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:0.2;}}
+
+.header-right{display:flex;align-items:center;gap:12px;}
+.hdr-stat{text-align:center;}
+.hdr-stat-val{font-family:var(--font-hud);font-size:14px;font-weight:700;line-height:1;}
+.hdr-stat-lbl{font-family:var(--font-mono);font-size:7px;color:var(--text2);letter-spacing:1px;}
+.hdr-divider{width:1px;height:36px;background:rgba(0,212,255,0.2);}
+.sec-level{
+  font-family:var(--font-hud);font-size:10px;letter-spacing:2px;
+  padding:3px 10px;border:1px solid var(--blue);color:var(--blue);
+  box-shadow:var(--glow-blue);
+  animation:badgeGlow 2s ease-in-out infinite;
+}
+@keyframes badgeGlow{0%,100%{box-shadow:var(--glow-blue);}50%{box-shadow:0 0 25px rgba(0,212,255,0.7);}}
+
+/* ═══════════════════════════════════════
+   MAIN GRID
+═══════════════════════════════════════ */
+.main-grid{
+  display:grid;
+  grid-template-columns:280px 1fr 280px;
+  gap:6px;
+  overflow:hidden;
+}
+
+/* ─── PANEL BASE ─── */
+.panel{
+  background:var(--panel);
+  border:1px solid var(--border);
+  backdrop-filter:blur(10px);
+  padding:10px;
+  position:relative;overflow:hidden;
+  display:flex;flex-direction:column;gap:8px;
+}
+.panel::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--blue),transparent);opacity:0.4;
+}
+.panel-title{
+  font-family:var(--font-hud);font-size:8px;color:var(--blue);letter-spacing:3px;
+  padding-bottom:6px;border-bottom:1px solid rgba(0,212,255,0.15);
+  display:flex;align-items:center;gap:5px;flex-shrink:0;
+}
+.panel-title::before{content:'▶';font-size:6px;color:var(--red);}
+
+/* ─── LEFT COLUMN ─── */
+.left-col{display:flex;flex-direction:column;gap:6px;overflow:hidden;}
+
+/* Camera Feed */
+.cam-feed-wrap{
+  position:relative;
+  background:#000;
+  border:1px solid var(--border);
+  overflow:hidden;
+  flex:1;
+  min-height:0;
+}
+.cam-feed-wrap video{width:100%;height:100%;object-fit:cover;display:block;}
+.cam-scanline{
+  position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.15) 2px,rgba(0,0,0,0.15) 4px);
+  pointer-events:none;z-index:3;
+}
+.cam-ai-scan{
+  position:absolute;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,rgba(0,212,255,0.7),transparent);
+  box-shadow:0 0 6px rgba(0,212,255,0.5);z-index:4;pointer-events:none;
+}
+.cam-ai-scan.c1{animation:scanV 2.5s linear infinite;}
+.cam-ai-scan.c2{animation:scanV 3.2s linear infinite 0.5s;}
+@keyframes scanV{0%{top:0;}100%{top:100%;}}
+.cam-hud-tl{position:absolute;top:8px;left:8px;font-family:var(--font-mono);font-size:8px;color:var(--blue);z-index:5;line-height:1.7;text-shadow:0 0 5px rgba(0,212,255,0.8);}
+.cam-hud-tr{position:absolute;top:8px;right:8px;font-family:var(--font-mono);font-size:8px;color:var(--blue);z-index:5;text-align:right;line-height:1.7;}
+.cam-hud-bl{position:absolute;bottom:8px;left:8px;font-family:var(--font-mono);font-size:8px;z-index:5;display:flex;align-items:center;gap:5px;color:var(--green);}
+.cam-hud-br{position:absolute;bottom:8px;right:8px;font-family:var(--font-mono);font-size:8px;color:var(--red);z-index:5;display:flex;align-items:center;gap:4px;}
+.rec-dot{width:7px;height:7px;background:var(--red);border-radius:50%;box-shadow:0 0 7px var(--red);animation:blink 0.8s infinite;flex-shrink:0;}
+/* Targeting box */
+.target-box{
+  position:absolute;width:50px;height:40px;
+  border:1px solid rgba(0,212,255,0.6);
+  z-index:5;pointer-events:none;
+  animation:targetFloat 4s ease-in-out infinite;
+}
+.target-box::before,.target-box::after{content:'';position:absolute;background:var(--blue);}
+.target-box::before{width:6px;height:1px;top:-1px;left:-1px;}
+.target-box::after{width:1px;height:6px;top:-1px;left:-1px;}
+.target-box.br::before{width:6px;height:1px;bottom:-1px;right:-1px;top:auto;left:auto;}
+.target-box.br::after{width:1px;height:6px;bottom:-1px;right:-1px;top:auto;left:auto;}
+@keyframes targetFloat{0%,100%{transform:translate(20px,15px);}50%{transform:translate(24px,18px);}}
+
+.cam-block{
+  display:flex;flex-direction:column;gap:4px;
+  flex:1;min-height:0;
+}
+.cam-label-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:var(--font-mono);font-size:8px;padding:3px 6px;
+  background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.15);
+  flex-shrink:0;
+}
+.cam-label-name{color:var(--blue);letter-spacing:1px;}
+.cam-label-status{display:flex;align-items:center;gap:4px;color:var(--green);}
+
+.cam-motion-bar{
+  height:4px;background:rgba(255,255,255,0.05);border:1px solid rgba(0,212,255,0.1);overflow:hidden;flex-shrink:0;
+}
+.cam-motion-fill{height:100%;background:linear-gradient(90deg,var(--blue2),var(--blue));box-shadow:0 0 5px var(--blue);transition:width 1s ease;}
+
+/* Loading overlay for camera */
+.cam-loading{
+  position:absolute;inset:0;background:#000;z-index:20;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+}
+.cam-loading-ring{
+  width:40px;height:40px;border:2px solid rgba(0,212,255,0.2);border-top-color:var(--blue);
+  border-radius:50%;animation:spin 1s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.cam-loading-txt{font-family:var(--font-hud);font-size:9px;color:var(--blue);letter-spacing:2px;animation:blink 1s infinite;}
+
+/* ─── CENTER COLUMN ─── */
+.center-col{display:flex;flex-direction:column;gap:6px;overflow:hidden;}
+
+/* Map */
+.map-panel{flex:1;min-height:0;position:relative;overflow:hidden;}
+#mapCanvas{width:100%;height:100%;display:block;}
+.map-overlay-tl{
+  position:absolute;top:10px;left:10px;z-index:5;
+  font-family:var(--font-mono);font-size:8px;color:var(--blue);line-height:1.9;
+  text-shadow:0 0 6px rgba(0,212,255,0.7);
+}
+.map-overlay-tr{
+  position:absolute;top:10px;right:10px;z-index:5;
+  font-family:var(--font-mono);font-size:8px;color:var(--text2);line-height:1.9;text-align:right;
+}
+.map-label{
+  position:absolute;z-index:6;
+  font-family:var(--font-mono);font-size:8px;letter-spacing:1px;
+  pointer-events:none;
+}
+
+/* AI Stats row */
+.stats-row{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:6px;flex-shrink:0;
+}
+.stat-card{
+  background:rgba(0,212,255,0.03);border:1px solid rgba(0,212,255,0.15);
+  padding:7px 9px;position:relative;overflow:hidden;text-align:center;
+}
+.stat-card::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--blue),transparent);opacity:0.3;
+}
+.stat-card-lbl{font-family:var(--font-mono);font-size:7px;color:var(--text2);letter-spacing:1px;margin-bottom:3px;}
+.stat-card-val{font-family:var(--font-hud);font-size:20px;font-weight:700;color:var(--blue);text-shadow:0 0 10px rgba(0,212,255,0.6);line-height:1;}
+.stat-card-bar{margin-top:4px;height:3px;background:rgba(255,255,255,0.06);overflow:hidden;}
+.stat-card-bar-fill{height:100%;background:linear-gradient(90deg,var(--blue2),var(--blue));box-shadow:0 0 5px var(--blue);transition:width 1.5s ease;}
+
+/* ─── RIGHT COLUMN ─── */
+.right-col{display:flex;flex-direction:column;gap:6px;overflow:hidden;}
+
+/* AI Analysis cards */
+.ai-grid{display:flex;flex-direction:column;gap:5px;flex:0 0 auto;}
+.ai-row{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.ai-card{
+  background:rgba(0,212,255,0.02);border:1px solid rgba(0,212,255,0.12);
+  padding:6px 8px;
+}
+.ai-card-lbl{font-family:var(--font-mono);font-size:7px;color:var(--text2);letter-spacing:1px;margin-bottom:2px;}
+.ai-card-val{font-family:var(--font-hud);font-size:15px;font-weight:700;color:var(--blue);text-shadow:0 0 8px rgba(0,212,255,0.5);line-height:1;}
+.ai-card-val.green{color:var(--green);text-shadow:0 0 8px rgba(0,255,136,0.5);}
+.ai-card-val.red{color:var(--red);text-shadow:0 0 8px rgba(255,34,68,0.6);}
+.ai-card-val.yellow{color:var(--yellow);text-shadow:0 0 8px rgba(255,204,0,0.5);}
+.ai-card-bar{margin-top:3px;height:2px;background:rgba(255,255,255,0.06);overflow:hidden;}
+.ai-card-bar-fill{height:100%;transition:width 1.5s ease;}
+
+/* Alert Panel */
+.alert-panel{flex:0 0 auto;}
+.alert-list{display:flex;flex-direction:column;gap:4px;}
+.alert-item{
+  display:flex;align-items:center;gap:8px;
+  padding:5px 8px;border:1px solid rgba(0,212,255,0.12);
+  font-family:var(--font-mono);font-size:8px;background:rgba(0,0,0,0.3);
+  transition:all 0.3s;
+}
+.alert-item.red-a{border-color:rgba(255,34,68,0.4);background:rgba(255,34,68,0.06);}
+.alert-item.yellow-a{border-color:rgba(255,204,0,0.3);background:rgba(255,204,0,0.04);}
+.alert-dot-sm{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.alert-dot-sm.green{background:var(--green);box-shadow:var(--glow-green);}
+.alert-dot-sm.red{background:var(--red);box-shadow:var(--glow-red);animation:blink 0.8s infinite;}
+.alert-dot-sm.yellow{background:var(--yellow);box-shadow:0 0 7px rgba(255,204,0,0.6);}
+.alert-dot-sm.blue{background:var(--blue);box-shadow:var(--glow-blue);}
+.alert-msg{flex:1;color:var(--text);}
+.alert-time{color:var(--text2);white-space:nowrap;}
+
+/* Log */
+.log-scroll{
+  flex:1;min-height:0;overflow-y:auto;
+  font-family:var(--font-mono);font-size:8px;line-height:1.9;
+  scrollbar-width:thin;scrollbar-color:var(--blue2) transparent;
+}
+.log-scroll::-webkit-scrollbar{width:3px;}
+.log-scroll::-webkit-scrollbar-thumb{background:var(--blue2);}
+.log-entry{display:flex;gap:8px;border-bottom:1px solid rgba(0,212,255,0.04);padding:1px 0;}
+.log-time{color:rgba(138,184,208,0.35);white-space:nowrap;}
+.log-msg{color:var(--text);}
+.log-msg.ok{color:var(--green);}
+.log-msg.warn{color:var(--yellow);}
+.log-msg.alert-l{color:var(--red);font-weight:bold;}
+.log-msg.info{color:var(--blue);}
+
+/* ─── EMERGENCY CONTROLS BAR ─── */
+.ctrl-bar{
+  display:flex;align-items:center;gap:6px;
+  background:var(--panel);border:1px solid var(--border);
+  padding:6px 10px;backdrop-filter:blur(10px);
+  border-bottom:2px solid var(--blue);
+  flex-wrap:wrap;overflow:hidden;
+}
+.ctrl-btn{
+  display:flex;align-items:center;gap:5px;
+  font-family:var(--font-hud);font-size:8px;letter-spacing:1px;
+  padding:5px 10px;cursor:pointer;border:1px solid;
+  transition:all 0.2s;background:transparent;color:inherit;
+  white-space:nowrap;
+}
+.ctrl-btn.blue{color:var(--blue);border-color:rgba(0,212,255,0.4);}
+.ctrl-btn.blue:hover{background:rgba(0,212,255,0.1);box-shadow:var(--glow-blue);}
+.ctrl-btn.red{color:var(--red);border-color:rgba(255,34,68,0.4);}
+.ctrl-btn.red:hover{background:rgba(255,34,68,0.12);box-shadow:var(--glow-red);}
+.ctrl-btn.green{color:var(--green);border-color:rgba(0,255,136,0.3);}
+.ctrl-btn.green:hover{background:rgba(0,255,136,0.08);box-shadow:var(--glow-green);}
+.ctrl-btn.yellow{color:var(--yellow);border-color:rgba(255,204,0,0.3);}
+.ctrl-btn.yellow:hover{background:rgba(255,204,0,0.08);}
+.ctrl-btn.active{animation:btnPulse 0.5s ease 3;}
+@keyframes btnPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.05);}}
+.ctrl-divider{width:1px;height:28px;background:rgba(0,212,255,0.15);flex-shrink:0;}
+.ctrl-status{
+  margin-left:auto;font-family:var(--font-mono);font-size:8px;
+  display:flex;align-items:center;gap:8px;
+}
+.ctrl-status-item{display:flex;align-items:center;gap:4px;color:var(--text2);}
+.ctrl-status-item .dot{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:var(--glow-green);animation:blink 2s infinite;}
+
+/* ─── FOOTER ─── */
+footer{
+  background:var(--panel);border:1px solid var(--border);border-bottom:2px solid var(--blue);
+  display:flex;align-items:center;justify-content:space-between;padding:0 14px;
+  backdrop-filter:blur(10px);flex-wrap:wrap;gap:4px;
+}
+.footer-item{
+  font-family:var(--font-mono);font-size:7px;color:var(--text2);
+  display:flex;align-items:center;gap:4px;letter-spacing:1px;
+}
+.footer-item .dot{width:4px;height:4px;border-radius:50%;background:var(--blue);box-shadow:var(--glow-blue);animation:blink 2.5s infinite;}
+
+/* ─── RADAR ─── */
+.radar-wrap{position:relative;display:flex;align-items:center;justify-content:center;}
+
+/* ─── EVIDENCE PANEL ─── */
+.evidence-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;}
+.ev-card{
+  background:rgba(0,0,0,0.5);border:1px solid rgba(0,212,255,0.15);
+  padding:5px;font-family:var(--font-mono);font-size:7px;
+  position:relative;overflow:hidden;cursor:pointer;
+  transition:all 0.2s;
+}
+.ev-card:hover{border-color:rgba(0,212,255,0.4);box-shadow:var(--glow-blue);}
+.ev-img{
+  width:100%;height:36px;background:
+    linear-gradient(135deg,rgba(0,20,50,0.8) 0%,rgba(0,50,100,0.6) 100%);
+  margin-bottom:3px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;
+}
+.ev-icon{font-size:16px;opacity:0.5;}
+.ev-time{color:var(--blue);}
+.ev-conf{color:var(--green);}
+.ev-card.new-ev{border-color:rgba(255,34,68,0.5);animation:newEv 0.5s ease 3;}
+@keyframes newEv{0%,100%{background:rgba(0,0,0,0.5);}50%{background:rgba(255,34,68,0.1);}}
+
+/* ─── NOTIFICATION TOASTS ─── */
+#notifContainer{
+  position:fixed;top:74px;right:10px;z-index:800;
+  display:flex;flex-direction:column;gap:5px;pointer-events:none;
+}
+.notif{
+  background:rgba(0,20,40,0.95);border:1px solid;
+  padding:8px 12px;font-family:var(--font-mono);font-size:9px;
+  min-width:220px;backdrop-filter:blur(10px);
+  animation:notifIn 0.3s ease forwards;
+  pointer-events:none;
+}
+.notif.out{animation:notifOut 0.3s ease forwards;}
+.notif.blue-n{border-color:rgba(0,212,255,0.5);color:var(--blue);box-shadow:var(--glow-blue);}
+.notif.red-n{border-color:rgba(255,34,68,0.5);color:var(--red);box-shadow:var(--glow-red);}
+.notif.green-n{border-color:rgba(0,255,136,0.4);color:var(--green);box-shadow:var(--glow-green);}
+.notif.yellow-n{border-color:rgba(255,204,0,0.4);color:var(--yellow);}
+.notif-title{font-weight:bold;letter-spacing:1px;margin-bottom:2px;}
+.notif-msg{font-size:8px;opacity:0.7;}
+@keyframes notifIn{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
+@keyframes notifOut{from{transform:translateX(0);opacity:1;}to{transform:translateX(100%);opacity:0;}}
+
+/* ─── EMERGENCY POPUP ─── */
+#emergencyPopup{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.8);
+  background:rgba(15,0,0,0.98);border:2px solid var(--red);
+  box-shadow:0 0 80px rgba(255,34,68,0.8),inset 0 0 50px rgba(255,34,68,0.08);
+  padding:30px 40px;z-index:950;text-align:center;
+  display:none;min-width:380px;
+  animation:popupIn 0.3s ease forwards;
+}
+@keyframes popupIn{from{transform:translate(-50%,-50%) scale(0.8);opacity:0;}to{transform:translate(-50%,-50%) scale(1);opacity:1;}}
+.em-icon{font-size:44px;margin-bottom:12px;animation:blink 0.4s infinite;}
+.em-title{font-family:var(--font-hud);font-size:18px;font-weight:900;color:var(--red);letter-spacing:3px;text-shadow:0 0 25px var(--red);margin-bottom:6px;}
+.em-subtitle{font-family:var(--font-mono);font-size:11px;color:var(--yellow);letter-spacing:2px;margin-bottom:12px;}
+.em-details{font-family:var(--font-mono);font-size:9px;color:var(--text);line-height:2;margin-bottom:16px;}
+.em-response{font-family:var(--font-hud);font-size:13px;color:var(--green);letter-spacing:2px;animation:blink 0.8s infinite;margin-bottom:18px;}
+.em-close{
+  background:var(--red2);border:1px solid var(--red);color:#fff;
+  font-family:var(--font-hud);font-size:10px;letter-spacing:2px;
+  padding:9px 24px;cursor:pointer;transition:all 0.2s;
+}
+.em-close:hover{background:var(--red);box-shadow:0 0 20px var(--red);}
+
+/* ─── THREAT METER ─── */
+.threat-meter{
+  display:flex;align-items:center;gap:6px;flex-shrink:0;
+}
+.threat-bar{
+  flex:1;height:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,34,68,0.2);overflow:hidden;
+}
+.threat-fill{
+  height:100%;background:linear-gradient(90deg,var(--green),var(--yellow),var(--red));
+  box-shadow:0 0 8px currentColor;transition:width 1s ease;
+  width:15%;
+}
+.threat-lbl{font-family:var(--font-hud);font-size:10px;font-weight:700;color:var(--green);min-width:50px;text-align:right;}
+
+/* ─── NEURAL NET ANIMATION ─── */
+#neuralCanvas{position:absolute;inset:0;pointer-events:none;z-index:0;opacity:0.3;}
+
+/* shaking */
+@keyframes shakeIt{0%,100%{transform:translateX(0);}20%,60%{transform:translateX(-3px);}40%,80%{transform:translateX(3px);}}
+body.shaking{animation:shakeIt 0.4s ease;}
+</style>
+</head>
+<body>
+
+<!-- Overlays -->
+<canvas id="bgCanvas"></canvas>
+<div id="alertFlash"></div>
+<div id="alertFlashBorder"></div>
+<div id="notifContainer"></div>
+
+<!-- Emergency Popup -->
+<div id="emergencyPopup">
+  <div class="em-icon">🚨</div>
+  <div class="em-title">⚠ EMERGENCY ALERT DETECTED ⚠</div>
+  <div class="em-subtitle" id="em-subtitle">SUSPICIOUS ACTIVITY DETECTED</div>
+  <div class="em-details" id="em-details">
+    TYPE: Possible Harassment / Assault Activity<br>
+    LOCATION: <span id="em-loc">STREET LIGHT AREA 1</span><br>
+    GPS: <span id="em-gps">13.0827°N, 80.2707°E</span><br>
+    TIME: <span id="em-time">--:--:--</span><br>
+    AI CONFIDENCE: 97.4%
+  </div>
+  <div class="em-response">◉ POLICE RESPONSE ACTIVATED</div>
+  <button class="em-close" onclick="dismissEmergency()">ACKNOWLEDGE & DISPATCH</button>
+</div>
+
+<!-- APP -->
+<div id="app">
+
+  <!-- ══ HEADER ══ -->
+  <header>
+    <div class="logo-wrap">
+      <div class="logo-circle">HA</div>
+      <div>
+        <div class="logo-text-h">HER ALERT</div>
+        <div class="logo-text-s">AI POLICE CONTROL SYSTEM — CENTRAL COMMAND</div>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div id="mainClock">--:--:--</div>
+      <div id="mainDate">-- --- ----</div>
+      <div class="live-badge"><div class="live-dot"></div>LIVE MONITORING</div>
+    </div>
+
+    <div class="header-right">
+      <div class="hdr-stat">
+        <div class="hdr-stat-val" style="color:var(--red)" id="emergencyCount">0</div>
+        <div class="hdr-stat-lbl">ALERTS</div>
+      </div>
+      <div class="hdr-divider"></div>
+      <div class="hdr-stat">
+        <div class="hdr-stat-val" style="color:var(--green)">2</div>
+        <div class="hdr-stat-lbl">CAMERAS</div>
+      </div>
+      <div class="hdr-divider"></div>
+      <div class="hdr-stat">
+        <div class="hdr-stat-val" style="color:var(--blue)" id="networkSignal">98%</div>
+        <div class="hdr-stat-lbl">SIGNAL</div>
+      </div>
+      <div class="hdr-divider"></div>
+      <div class="sec-level">SEC LEVEL ALPHA</div>
+    </div>
+  </header>
+
+  <!-- ══ MAIN GRID ══ -->
+  <div class="main-grid">
+
+    <!-- ══ LEFT ══ -->
+    <div class="left-col">
+
+      <!-- Camera 1 -->
+      <div class="panel" style="flex:1;min-height:0;">
+        <div class="panel-title">SURVEILLANCE FEED — NODE 01</div>
+        <div class="cam-block" style="flex:1;min-height:0;">
+          <div class="cam-label-bar">
+            <span class="cam-label-name">CAM NODE 01 | AREA 1</span>
+            <span class="cam-label-status"><div class="alert-dot-sm green"></div>ACTIVE</span>
+          </div>
+          <div class="cam-feed-wrap" style="flex:1;min-height:0;" id="camWrap1">
+            <div class="cam-loading" id="camLoading1">
+              <div class="cam-loading-ring"></div>
+              <div class="cam-loading-txt">CONNECTING...</div>
+            </div>
+            <video id="video1" autoplay muted playsinline></video>
+            <div class="cam-scanline"></div>
+            <div class="cam-ai-scan c1"></div>
+            <div class="target-box" style="top:20%;left:25%;"></div>
+            <div class="cam-hud-tl">
+              NODE:01<br>
+              13.0827°N
+            </div>
+            <div class="cam-hud-tr">
+              AI:ON<br>
+              <span style="color:var(--green)" id="fps1">30</span>fps
+            </div>
+            <div class="cam-hud-bl">
+              <div class="rec-dot"></div>
+              <span id="camStatus1">ACTIVE</span>
+            </div>
+            <div class="cam-hud-br">
+              <div class="rec-dot"></div>REC
+            </div>
+          </div>
+          <div class="cam-motion-bar"><div class="cam-motion-fill" id="motion1Bar" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- Camera 2 -->
+      <div class="panel" style="flex:1;min-height:0;">
+        <div class="panel-title">SURVEILLANCE FEED — NODE 02</div>
+        <div class="cam-block" style="flex:1;min-height:0;">
+          <div class="cam-label-bar">
+            <span class="cam-label-name">CAM NODE 02 | AREA 2</span>
+            <span class="cam-label-status"><div class="alert-dot-sm green"></div>ACTIVE</span>
+          </div>
+          <div class="cam-feed-wrap" style="flex:1;min-height:0;" id="camWrap2">
+            <div class="cam-loading" id="camLoading2">
+              <div class="cam-loading-ring"></div>
+              <div class="cam-loading-txt">CONNECTING...</div>
+            </div>
+            <video id="video2" autoplay muted playsinline></video>
+            <div class="cam-scanline"></div>
+            <div class="cam-ai-scan c2"></div>
+            <div class="target-box" style="top:35%;left:45%;"></div>
+            <div class="cam-hud-tl">
+              NODE:02<br>
+              13.0850°N
+            </div>
+            <div class="cam-hud-tr">
+              AI:ON<br>
+              <span style="color:var(--green)" id="fps2">30</span>fps
+            </div>
+            <div class="cam-hud-bl">
+              <div class="rec-dot"></div>
+              <span id="camStatus2">ACTIVE</span>
+            </div>
+            <div class="cam-hud-br">
+              <div class="rec-dot"></div>REC
+            </div>
+          </div>
+          <div class="cam-motion-bar"><div class="cam-motion-fill" id="motion2Bar" style="width:0%"></div></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══ CENTER ══ -->
+    <div class="center-col">
+
+      <!-- Map -->
+      <div class="panel map-panel">
+        <canvas id="mapCanvas"></canvas>
+        <div class="map-overlay-tl">
+          CHENNAI SMART CITY GRID<br>
+          ZONE: SOUTH WEST SECTOR<br>
+          NODES: 2 ACTIVE
+        </div>
+        <div class="map-overlay-tr">
+          SCALE: 1:2500<br>
+          LAST UPDATE: <span id="mapTime">--:--</span><br>
+          SATELLITES: 12
+        </div>
+        <div class="panel-title" style="position:absolute;bottom:8px;left:10px;border:none;margin:0;padding:0;">TACTICAL CITY MAP — LIVE POSITIONING</div>
+      </div>
+
+      <!-- Stats Row -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-card-lbl">ACTIVE CAMS</div>
+          <div class="stat-card-val">2</div>
+          <div class="stat-card-bar"><div class="stat-card-bar-fill" style="width:100%"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-lbl">DETECTIONS</div>
+          <div class="stat-card-val" id="totalDetections">0</div>
+          <div class="stat-card-bar"><div class="stat-card-bar-fill" id="detBar" style="width:0%"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-lbl">THREAT LEVEL</div>
+          <div class="stat-card-val threat-low" id="threatLevelMain" style="color:var(--green)">LOW</div>
+          <div class="stat-card-bar"><div class="stat-card-bar-fill" id="threatMainBar" style="width:10%;background:linear-gradient(90deg,#005500,#00ff88)"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-lbl">AI CONFIDENCE</div>
+          <div class="stat-card-val" id="aiConfMain">97.4%</div>
+          <div class="stat-card-bar"><div class="stat-card-bar-fill" id="aiConfBar" style="width:97%"></div></div>
+        </div>
+      </div>
+
+      <!-- Evidence Panel -->
+      <div class="panel" style="flex-shrink:0;">
+        <div class="panel-title">EVIDENCE CAPTURE — AUTO STORAGE</div>
+        <div class="evidence-grid" id="evidenceGrid">
+          <div class="ev-card">
+            <div class="ev-img"><div class="ev-icon">📷</div></div>
+            <div class="ev-time">AWAITING CAPTURE</div>
+            <div class="ev-conf" style="color:var(--text2)">-- CONFIDENCE</div>
+          </div>
+          <div class="ev-card">
+            <div class="ev-img"><div class="ev-icon">🎥</div></div>
+            <div class="ev-time">STANDBY</div>
+            <div class="ev-conf" style="color:var(--text2)">-- CONFIDENCE</div>
+          </div>
+          <div class="ev-card">
+            <div class="ev-img"><div class="ev-icon">📷</div></div>
+            <div class="ev-time">AWAITING CAPTURE</div>
+            <div class="ev-conf" style="color:var(--text2)">-- CONFIDENCE</div>
+          </div>
+          <div class="ev-card">
+            <div class="ev-img"><div class="ev-icon">📹</div></div>
+            <div class="ev-time">STANDBY</div>
+            <div class="ev-conf" style="color:var(--text2)">-- CONFIDENCE</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══ RIGHT ══ -->
+    <div class="right-col">
+
+      <!-- AI Analysis -->
+      <div class="panel" style="flex-shrink:0;">
+        <div class="panel-title">AI ANALYSIS ENGINE</div>
+        <div class="ai-grid">
+          <div class="ai-row">
+            <div class="ai-card">
+              <div class="ai-card-lbl">HUMANS DETECTED</div>
+              <div class="ai-card-val" id="humanTotal">0</div>
+              <div class="ai-card-bar"><div class="ai-card-bar-fill" id="humanTotalBar" style="width:0%;background:linear-gradient(90deg,var(--blue2),var(--blue))"></div></div>
+            </div>
+            <div class="ai-card">
+              <div class="ai-card-lbl">MOTION INTENSITY</div>
+              <div class="ai-card-val" id="motionMain">0%</div>
+              <div class="ai-card-bar"><div class="ai-card-bar-fill" id="motionMainBar" style="width:0%;background:linear-gradient(90deg,#004488,var(--blue))"></div></div>
+            </div>
+          </div>
+          <div class="ai-row">
+            <div class="ai-card">
+              <div class="ai-card-lbl">SUSPICIOUS</div>
+              <div class="ai-card-val green" id="suspCount">0</div>
+              <div class="ai-card-bar"><div class="ai-card-bar-fill" id="suspBar" style="width:0%;background:linear-gradient(90deg,#005500,var(--green))"></div></div>
+            </div>
+            <div class="ai-card">
+              <div class="ai-card-lbl">INCIDENT PROB.</div>
+              <div class="ai-card-val" id="incidentProb">2.1%</div>
+              <div class="ai-card-bar"><div class="ai-card-bar-fill" id="incProbBar" style="width:2%;background:linear-gradient(90deg,#440000,var(--red))"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Threat Meter -->
+        <div class="threat-meter" style="margin-top:4px;">
+          <div style="font-family:var(--font-mono);font-size:7px;color:var(--text2);white-space:nowrap;">THREAT</div>
+          <div class="threat-bar"><div class="threat-fill" id="threatFill"></div></div>
+          <div class="threat-lbl" id="threatLbl">LOW</div>
+        </div>
+
+        <!-- Radar mini -->
+        <div style="display:flex;justify-content:center;padding:4px 0;">
+          <svg width="110" height="110" viewBox="0 0 110 110">
+            <circle cx="55" cy="55" r="50" fill="none" stroke="rgba(0,212,255,0.12)" stroke-width="1"/>
+            <circle cx="55" cy="55" r="37" fill="none" stroke="rgba(0,212,255,0.1)" stroke-width="1"/>
+            <circle cx="55" cy="55" r="24" fill="none" stroke="rgba(0,212,255,0.08)" stroke-width="1"/>
+            <line x1="5" y1="55" x2="105" y2="55" stroke="rgba(0,212,255,0.08)" stroke-width="1"/>
+            <line x1="55" y1="5" x2="55" y2="105" stroke="rgba(0,212,255,0.08)" stroke-width="1"/>
+            <defs>
+              <radialGradient id="sg" cx="100%" cy="50%" r="100%">
+                <stop offset="0%" stop-color="rgba(0,212,255,0.35)"/>
+                <stop offset="100%" stop-color="transparent"/>
+              </radialGradient>
+            </defs>
+            <path d="M55,55 L105,55 A50,50 0 0,0 55,5 Z" fill="url(#sg)" style="transform-origin:55px 55px;animation:radarSweep 3s linear infinite;" opacity="0.5"/>
+            <line x1="55" y1="55" x2="105" y2="55" stroke="rgba(0,212,255,0.6)" stroke-width="1.5" style="transform-origin:55px 55px;animation:radarSweep 3s linear infinite;"/>
+            <circle cx="72" cy="34" r="3" fill="var(--green)" opacity="0.8" style="animation:blink 2s infinite;"/>
+            <circle cx="38" cy="70" r="3" fill="var(--blue)" opacity="0.7" style="animation:blink 1.5s infinite;"/>
+            <circle cx="75" cy="72" r="2" fill="var(--yellow)" opacity="0.6" style="animation:blink 3s infinite;"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Alert Panel -->
+      <div class="panel" style="flex-shrink:0;">
+        <div class="panel-title">ACTIVE ALERTS</div>
+        <div class="alert-list" id="alertList">
+          <div class="alert-item">
+            <div class="alert-dot-sm blue"></div>
+            <div class="alert-msg">System initialized</div>
+            <div class="alert-time" id="alertTime1">--:--</div>
+          </div>
+          <div class="alert-item">
+            <div class="alert-dot-sm green"></div>
+            <div class="alert-msg">All nodes online</div>
+            <div class="alert-time" id="alertTime2">--:--</div>
+          </div>
+          <div class="alert-item">
+            <div class="alert-dot-sm blue"></div>
+            <div class="alert-msg">AI engine active</div>
+            <div class="alert-time" id="alertTime3">--:--</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="panel" style="flex:1;min-height:0;">
+        <div class="panel-title">INCIDENT LOG — REAL TIME</div>
+        <div class="log-scroll" id="logScroll"></div>
+      </div>
+
+    </div>
+
+  </div><!-- /main-grid -->
+
+  <!-- ══ CONTROL BAR ══ -->
+  <div class="ctrl-bar">
+    <button class="ctrl-btn red" onclick="btnAction('dispatch')">🚔 DISPATCH POLICE</button>
+    <button class="ctrl-btn red" onclick="btnAction('emergency')">🚨 EMERGENCY MODE</button>
+    <div class="ctrl-divider"></div>
+    <button class="ctrl-btn blue" onclick="btnAction('track')">📍 TRACK LOCATION</button>
+    <button class="ctrl-btn blue" onclick="btnAction('evidence')">💾 SAVE EVIDENCE</button>
+    <button class="ctrl-btn blue" onclick="btnAction('report')">📋 GENERATE REPORT</button>
+    <div class="ctrl-divider"></div>
+    <button class="ctrl-btn yellow" onclick="btnAction('alert')">📡 ALERT NEARBY UNITS</button>
+    <button class="ctrl-btn green" onclick="btnAction('record')">⏺ START RECORDING</button>
+    <button class="ctrl-btn blue" onclick="btnAction('lock')">🔒 LOCK INCIDENT FEED</button>
+    <div class="ctrl-status">
+      <div class="ctrl-status-item"><div class="dot"></div>AI ENGINE</div>
+      <div class="ctrl-status-item"><div class="dot"></div>POLICE NET</div>
+      <div class="ctrl-status-item"><div class="dot"></div>RECORDING</div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<!-- FOOTER inside app -->
+<style>
+  footer{grid-row:3;position:fixed;bottom:0;left:0;right:0;z-index:5;}
+</style>
+<footer>
+  <div class="footer-item"><div class="dot"></div>HER ALERT AI NETWORK — ACTIVE</div>
+  <div class="footer-item"><div class="dot"></div>CENTRAL POLICE MONITORING ACTIVE</div>
+  <div class="footer-item"><div class="dot"></div>SMART SURVEILLANCE ENABLED</div>
+  <div class="footer-item"><div class="dot"></div>REAL-TIME THREAT DETECTION SYSTEM</div>
+  <div class="footer-item"><div class="dot"></div>AI ENGINE RUNNING v2.4.1</div>
+  <div class="footer-item"><div class="dot"></div>UPTIME: <span id="uptime" style="color:var(--blue);margin-left:3px;">00:00:00</span></div>
+</footer>
+
+<style>
+@keyframes radarSweep{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+</style>
+
+<script>
+// ============================================================
+// HER ALERT — CENTRAL POLICE CONTROL SYSTEM
+// ============================================================
+
+const sys = {
+  alertCount: 0,
+  detections: 0,
+  suspCount: 0,
+  emergencyActive: false,
+  emergencyCooldown: false,
+  uptime: 0,
+  motionNode1: 0,
+  motionNode2: 0,
+  prevFrame1: null,
+  prevFrame2: null,
+  currentAlertNode: 1,
+};
+
+// ─── CLOCK ───
+function tick() {
+  const now = new Date();
+  document.getElementById('mainClock').textContent = now.toLocaleTimeString('en-US',{hour12:false});
+  document.getElementById('mainDate').textContent = now.toLocaleDateString('en-US',{day:'2-digit',month:'short',year:'numeric'}).toUpperCase();
+  document.getElementById('mapTime').textContent = now.toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit'});
+  sys.uptime++;
+  const h=String(Math.floor(sys.uptime/3600)).padStart(2,'0');
+  const m=String(Math.floor((sys.uptime%3600)/60)).padStart(2,'0');
+  const s=String(sys.uptime%60).padStart(2,'0');
+  document.getElementById('uptime').textContent=`${h}:${m}:${s}`;
+}
+setInterval(tick,1000); tick();
+
+// ─── BG CANVAS PARTICLES ───
+const bgCanvas=document.getElementById('bgCanvas');
+const bgCtx=bgCanvas.getContext('2d');
+let pts=[];
+function resizeBg(){bgCanvas.width=window.innerWidth;bgCanvas.height=window.innerHeight;}
+resizeBg(); window.addEventListener('resize',resizeBg);
+for(let i=0;i<80;i++) pts.push({x:Math.random()*window.innerWidth,y:Math.random()*window.innerHeight,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.5,a:Math.random()*.4+.1,c:Math.random()>.6?'204,68,255':'0,212,255'});
+function drawBg(){
+  bgCtx.clearRect(0,0,bgCanvas.width,bgCanvas.height);
+  pts.forEach(p=>{
+    bgCtx.beginPath();bgCtx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    bgCtx.fillStyle=`rgba(${p.c},${p.a})`;bgCtx.fill();
+    p.x+=p.vx;p.y+=p.vy;
+    if(p.x<0||p.x>bgCanvas.width)p.vx*=-1;
+    if(p.y<0||p.y>bgCanvas.height)p.vy*=-1;
+  });
+  requestAnimationFrame(drawBg);
+}
+drawBg();
+
+// ─── MAP CANVAS ───
+const mapCanvas=document.getElementById('mapCanvas');
+const mCtx=mapCanvas.getContext('2d');
+let mapTimer=0;
+let node1Alert=false,node2Alert=false;
+
+function resizeMap(){
+  const rect=mapCanvas.parentElement.getBoundingClientRect();
+  mapCanvas.width=rect.width;mapCanvas.height=rect.height;
+}
+
+function drawMap(){
+  resizeMap();
+  const w=mapCanvas.width,h=mapCanvas.height;
+  mCtx.clearRect(0,0,w,h);
+
+  // Dark base
+  mCtx.fillStyle='rgba(0,8,20,0.95)';
+  mCtx.fillRect(0,0,w,h);
+
+  // Grid streets
+  mCtx.strokeStyle='rgba(0,212,255,0.08)';
+  mCtx.lineWidth=1;
+  for(let x=0;x<w;x+=40){mCtx.beginPath();mCtx.moveTo(x,0);mCtx.lineTo(x,h);mCtx.stroke();}
+  for(let y=0;y<h;y+=40){mCtx.beginPath();mCtx.moveTo(0,y);mCtx.lineTo(w,y);mCtx.stroke();}
+
+  // Main roads
+  const roads=[
+    [[0,h*.35],[w,h*.35]],
+    [[0,h*.65],[w,h*.65]],
+    [[w*.25,0],[w*.25,h]],
+    [[w*.6,0],[w*.6,h]],
+    [[0,h*.5],[w*.4,h*.3]],
+    [[w*.4,h*.3],[w,h*.5]],
+    [[w*.15,h],[w*.45,h*.4]],
+    [[w*.55,h*.6],[w*.85,0]],
+  ];
+  roads.forEach(road=>{
+    mCtx.strokeStyle='rgba(0,180,255,0.2)';mCtx.lineWidth=2;
+    mCtx.beginPath();mCtx.moveTo(...road[0]);mCtx.lineTo(...road[1]);mCtx.stroke();
+  });
+
+  // Secondary roads
+  const sroads=[
+    [[w*.1,0],[w*.1,h*.7]],[[w*.4,0],[w*.4,h]],[[w*.75,0],[w*.75,h]],[[w*.9,h*.3],[w*.9,h]],
+    [[0,h*.2],[w*.6,h*.2]],[[0,h*.45],[w,h*.45]],[[0,h*.8],[w,h*.8]],[[w*.2,h],[w*.8,h*.5]],
+  ];
+  sroads.forEach(r=>{
+    mCtx.strokeStyle='rgba(0,100,180,0.15)';mCtx.lineWidth=1;
+    mCtx.beginPath();mCtx.moveTo(...r[0]);mCtx.lineTo(...r[1]);mCtx.stroke();
+  });
+
+  // Blocks
+  const blocks=[
+    [w*.1,h*.05,w*.13,h*.13],[w*.28,h*.05,w*.1,h*.12],[w*.45,h*.06,w*.12,h*.1],[w*.62,h*.06,w*.1,h*.11],
+    [w*.12,h*.22,w*.1,h*.1],[w*.26,h*.22,w*.12,h*.09],[w*.42,h*.23,w*.15,h*.1],[w*.65,h*.22,w*.1,h*.1],
+    [w*.1,h*.48,w*.1,h*.12],[w*.27,h*.48,w*.1,h*.1],[w*.45,h*.48,w*.12,h*.1],[w*.65,h*.48,w*.1,h*.1],
+    [w*.1,h*.68,w*.12,h*.1],[w*.28,h*.68,w*.1,h*.09],[w*.46,h*.68,w*.1,h*.09],[w*.63,h*.68,w*.12,h*.1],
+    [w*.1,h*.84,w*.1,h*.09],[w*.28,h*.84,w*.1,h*.1],[w*.48,h*.84,w*.08,h*.1],[w*.65,h*.84,w*.1,h*.09],
+  ];
+  blocks.forEach(b=>{
+    mCtx.fillStyle='rgba(0,30,60,0.6)';mCtx.fillRect(b[0],b[1],b[2],b[3]);
+    mCtx.strokeStyle='rgba(0,100,180,0.12)';mCtx.lineWidth=1;mCtx.strokeRect(b[0],b[1],b[2],b[3]);
+  });
+
+  // Camera 1 — node position
+  const n1x=w*.38,n1y=h*.3;
+  // Camera 2 — node position
+  const n2x=w*.62,n2y=h*.55;
+
+  // Pulse rings
+  const t=Date.now()/1000;
+  [n1x,n2x].forEach((nx,i)=>{
+    const ny=i===0?n1y:n2y;
+    const isAlert=i===0?node1Alert:node2Alert;
+    const col=isAlert?'255,34,68':'0,212,255';
+    for(let p=0;p<3;p++){
+      const prog=((t*0.5+p*0.33)%1);
+      const r=8+prog*40;
+      const a=(1-prog)*0.6;
+      mCtx.beginPath();mCtx.arc(nx,ny,r,0,Math.PI*2);
+      mCtx.strokeStyle=`rgba(${col},${a})`;mCtx.lineWidth=1.5;mCtx.stroke();
+    }
+  });
+
+  // Coverage circles
+  mCtx.beginPath();mCtx.arc(n1x,n1y,50,0,Math.PI*2);
+  mCtx.strokeStyle=node1Alert?'rgba(255,34,68,0.3)':'rgba(0,212,255,0.12)';
+  mCtx.lineWidth=1;mCtx.setLineDash([4,4]);mCtx.stroke();mCtx.setLineDash([]);
+
+  mCtx.beginPath();mCtx.arc(n2x,n2y,55,0,Math.PI*2);
+  mCtx.strokeStyle=node2Alert?'rgba(255,34,68,0.3)':'rgba(0,212,255,0.12)';
+  mCtx.lineWidth=1;mCtx.setLineDash([4,4]);mCtx.stroke();mCtx.setLineDash([]);
+
+  // Camera icons
+  function drawCamMarker(x,y,label,isAlert){
+    const col=isAlert?'#ff2244':'#00d4ff';
+    const glow=isAlert?'rgba(255,34,68,':'rgba(0,212,255,';
+    // Glow
+    const grad=mCtx.createRadialGradient(x,y,0,x,y,20);
+    grad.addColorStop(0,`${glow}0.3)`); grad.addColorStop(1,'transparent');
+    mCtx.beginPath();mCtx.arc(x,y,20,0,Math.PI*2);mCtx.fillStyle=grad;mCtx.fill();
+    // Dot
+    mCtx.beginPath();mCtx.arc(x,y,5,0,Math.PI*2);mCtx.fillStyle=col;
+    mCtx.shadowColor=col;mCtx.shadowBlur=10;mCtx.fill();mCtx.shadowBlur=0;
+    // Cross
+    mCtx.strokeStyle=col;mCtx.lineWidth=1;
+    mCtx.beginPath();mCtx.moveTo(x-10,y);mCtx.lineTo(x+10,y);mCtx.stroke();
+    mCtx.beginPath();mCtx.moveTo(x,y-10);mCtx.lineTo(x,y+10);mCtx.stroke();
+    // Label
+    mCtx.fillStyle=col;mCtx.font='bold 9px "Share Tech Mono"';
+    mCtx.textAlign='left';mCtx.fillText(label,x+8,y-8);
+  }
+  drawCamMarker(n1x,n1y,'NODE 01',node1Alert);
+  drawCamMarker(n2x,n2y,'NODE 02',node2Alert);
+
+  // Connection line
+  mCtx.beginPath();mCtx.moveTo(n1x,n1y);mCtx.lineTo(n2x,n2y);
+  mCtx.strokeStyle='rgba(0,212,255,0.15)';mCtx.lineWidth=1;mCtx.setLineDash([6,6]);mCtx.stroke();mCtx.setLineDash([]);
+
+  // Control station marker
+  const csx=w*.5,csy=h*.15;
+  mCtx.beginPath();mCtx.arc(csx,csy,6,0,Math.PI*2);mCtx.fillStyle='var(--red)';
+  mCtx.shadowColor='var(--red)';mCtx.shadowBlur=12;mCtx.fill();mCtx.shadowBlur=0;
+  mCtx.fillStyle='#ff2244';mCtx.font='bold 9px "Share Tech Mono"';mCtx.textAlign='center';
+  mCtx.fillText('CONTROL CTR',csx,csy-10);
+
+  // Lines from control to nodes
+  [n1x,n2x].forEach((nx,i)=>{
+    const ny=i===0?n1y:n2y;
+    mCtx.beginPath();mCtx.moveTo(csx,csy);mCtx.lineTo(nx,ny);
+    mCtx.strokeStyle='rgba(255,34,68,0.15)';mCtx.lineWidth=1;mCtx.setLineDash([3,6]);mCtx.stroke();mCtx.setLineDash([]);
+  });
+
+  // Moving data packets on lines
+  [0,1].forEach(i=>{
+    const nx=i===0?n1x:n2x,ny=i===0?n1y:n2y;
+    const prog=(t*0.6+(i*0.5))%1;
+    const px=csx+(nx-csx)*prog,py=csy+(ny-csy)*prog;
+    mCtx.beginPath();mCtx.arc(px,py,2.5,0,Math.PI*2);
+    mCtx.fillStyle='rgba(0,255,136,0.8)';mCtx.fill();
+  });
+
+  mapTimer++;
+  requestAnimationFrame(drawMap);
+}
+drawMap();
+
+
+
+// ─── MOTION DETECTION ───
+const mcanvas=document.createElement('canvas');
+const mctx=mcanvas.getContext('2d');
+
+function startMotionDetection(){
+  setInterval(()=>{
+    const v=document.getElementById('video1');
+    if(!v.videoWidth) return;
+    mcanvas.width=v.videoWidth;mcanvas.height=v.videoHeight;
+    mctx.drawImage(v,0,0,mcanvas.width,mcanvas.height);
+    const frame=mctx.getImageData(0,0,mcanvas.width,mcanvas.height);
+    mctx.clearRect(0,0,mcanvas.width,mcanvas.height);
+    if(!sys.prevFrame1){sys.prevFrame1=frame;return;}
+    let diff=0,total=0;
+    const d=frame.data,p=sys.prevFrame1.data,step=10;
+    for(let i=0;i<d.length;i+=4*step){
+      if(Math.abs(d[i]-p[i])+Math.abs(d[i+1]-p[i+1])+Math.abs(d[i+2]-p[i+2])>45)diff++;
+      total++;
+    }
+    sys.prevFrame1=frame;
+    const pct=Math.round((diff/total)*100);
+    handleMotion(pct);
+  },600);
+}
+
+function handleMotion(pct){
+  sys.motionNode1=pct;
+  document.getElementById('motion1Bar').style.width=Math.min(100,pct*4)+'%';
+  document.getElementById('motion2Bar').style.width=Math.min(100,(pct*3+Math.random()*5))+'%';
+  document.getElementById('motionMain').textContent=pct+'%';
+  document.getElementById('motionMainBar').style.width=Math.min(100,pct*4)+'%';
+
+  if(pct>3){
+    sys.detections++;
+    document.getElementById('totalDetections').textContent=sys.detections;
+    document.getElementById('detBar').style.width=Math.min(100,sys.detections*10)+'%';
+    const humans=Math.min(8,1+Math.floor(pct/8));
+    document.getElementById('humanTotal').textContent=humans;
+    document.getElementById('humanTotalBar').style.width=(humans*12)+'%';
+
+    setThreat('MEDIUM');
+    addLog(`Motion detected — Intensity ${pct}% — Node 01`,'warn');
+    node1Alert=true;
+
+    if(!sys.emergencyActive && !sys.emergencyCooldown && pct>10){
+      triggerEmergency(1);
+    }
+  } else {
+    node1Alert=false;
+    if(!sys.emergencyActive) setThreat('LOW');
+  }
+}
+
+function setThreat(level){
+  const el=document.getElementById('threatLevelMain');
+  const fill=document.getElementById('threatMainBar');
+  const fill2=document.getElementById('threatFill');
+  const lbl=document.getElementById('threatLbl');
+  if(level==='LOW'){
+    el.textContent='LOW';el.style.color='var(--green)';
+    fill.style.cssText='width:10%;background:linear-gradient(90deg,#005500,#00ff88)';
+    fill2.style.width='10%';lbl.textContent='LOW';lbl.style.color='var(--green)';
+  } else if(level==='MEDIUM'){
+    el.textContent='MEDIUM';el.style.color='var(--yellow)';
+    fill.style.cssText='width:55%;background:linear-gradient(90deg,#554400,#ffcc00)';
+    fill2.style.width='55%';lbl.textContent='MED';lbl.style.color='var(--yellow)';
+  } else if(level==='HIGH'){
+    el.textContent='HIGH';el.style.color='var(--red)';
+    fill.style.cssText='width:100%;background:linear-gradient(90deg,#880000,#ff2244)';
+    fill2.style.width='100%';lbl.textContent='HIGH';lbl.style.color='var(--red)';
+  }
+}
+
+// ─── SIMULATION MODE (if no webcam) ───
+function simulationMode(){
+  setInterval(()=>{
+    const pct=Math.floor(Math.random()*15);
+    handleMotion(pct);
+  },2000);
+}
+
+// ─── EMERGENCY TRIGGER ───
+function triggerEmergency(node){
+  if(sys.emergencyActive) return;
+  sys.emergencyActive=true;
+  sys.emergencyCooldown=true;
+  sys.alertCount++;
+  sys.suspCount++;
+  document.getElementById('emergencyCount').textContent=sys.alertCount;
+  document.getElementById('suspCount').textContent=sys.suspCount;
+  document.getElementById('suspBar').style.width=(sys.suspCount*15)+'%';
+  document.getElementById('incidentProb').textContent=(55+Math.random()*40).toFixed(1)+'%';
+  document.getElementById('incProbBar').style.width='80%';
+
+  // Flash
+  document.getElementById('alertFlash').style.display='block';
+  document.getElementById('alertFlashBorder').style.display='block';
+  setThreat('HIGH');
+  document.body.classList.add('shaking');
+  setTimeout(()=>document.body.classList.remove('shaking'),500);
+
+  if(node===1){ node1Alert=true; }
+  else { node2Alert=true; }
+
+  // Popup
+  const locations=[
+    {name:'STREET LIGHT AREA 1',gps:'13.0827°N, 80.2707°E'},
+    {name:'STREET LIGHT AREA 2',gps:'13.0850°N, 80.2750°E'},
+  ];
+  const loc=locations[node-1];
+  document.getElementById('em-subtitle').textContent='SUSPICIOUS ACTIVITY — NODE 0'+node;
+  document.getElementById('em-loc').textContent=loc.name;
+  document.getElementById('em-gps').textContent=loc.gps;
+  document.getElementById('em-time').textContent=new Date().toLocaleTimeString('en-US',{hour12:false});
+  document.getElementById('emergencyPopup').style.display='block';
+
+  addLog(`⚠ EMERGENCY: Suspicious activity – Node 0${node} – ${loc.name}`,'alert-l');
+  addLog('AI threat level elevated to HIGH','alert-l');
+  addLog('Police response protocol initiated','alert-l');
+  showNotif('🚨 EMERGENCY ALERT','Suspicious activity detected – '+loc.name,'red-n');
+  addAlertItem('red','⚠ SUSPICIOUS ACTIVITY NODE 0'+node,node===1?'AREA 1':'AREA 2');
+
+  // Evidence capture
+  captureEvidence(node);
+
+  // Cooldown
+  setTimeout(()=>{ sys.emergencyCooldown=false; },30000);
+}
+
+window.dismissEmergency=function(){
+  sys.emergencyActive=false;
+  document.getElementById('emergencyPopup').style.display='none';
+  document.getElementById('alertFlash').style.display='none';
+  document.getElementById('alertFlashBorder').style.display='none';
+  node1Alert=false; node2Alert=false;
+  setThreat('LOW');
+  addLog('Emergency acknowledged by control operator','info');
+  addLog('Dispatch confirmed – units en route','ok');
+  showNotif('✅ ALERT ACKNOWLEDGED','Units dispatched to location','green-n');
+  document.getElementById('incidentProb').textContent='2.1%';
+  document.getElementById('incProbBar').style.width='2%';
+};
+
+// ─── EVIDENCE CAPTURE ───
+let evCount=0;
+function captureEvidence(node){
+  evCount++;
+  const grid=document.getElementById('evidenceGrid');
+  const slot=grid.children[(evCount-1)%4];
+  const now=new Date().toLocaleTimeString('en-US',{hour12:false});
+  const conf=(94+Math.random()*5).toFixed(1);
+  slot.className='ev-card new-ev';
+  slot.innerHTML=`
+    <div class="ev-img" style="background:linear-gradient(135deg,rgba(50,0,0,0.8),rgba(100,0,20,0.6));">
+      <div class="ev-icon">📸</div>
+    </div>
+    <div class="ev-time">NODE 0${node} | ${now}</div>
+    <div class="ev-conf">${conf}% CONF</div>`;
+  setTimeout(()=>slot.classList.remove('new-ev'),2000);
+}
+
+// ─── LOG ───
+function addLog(msg,type='info'){
+  const log=document.getElementById('logScroll');
+  const now=new Date().toLocaleTimeString('en-US',{hour12:false});
+  const e=document.createElement('div');e.className='log-entry';
+  e.innerHTML=`<span class="log-time">[${now}]</span><span class="log-msg ${type}">${msg}</span>`;
+  log.insertBefore(e,log.firstChild);
+  while(log.children.length>60)log.removeChild(log.lastChild);
+}
+
+// ─── ALERT ITEMS ───
+function addAlertItem(color,msg,loc){
+  const list=document.getElementById('alertList');
+  const now=new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit'});
+  const item=document.createElement('div');
+  item.className=`alert-item ${color==='red'?'red-a':color==='yellow'?'yellow-a':''}`;
+  item.innerHTML=`<div class="alert-dot-sm ${color}"></div><div class="alert-msg">${msg}</div><div class="alert-time">${now}</div>`;
+  list.insertBefore(item,list.firstChild);
+  while(list.children.length>6)list.removeChild(list.lastChild);
+}
+
+// ─── NOTIFICATIONS ───
+function showNotif(title,msg,type){
+  const container=document.getElementById('notifContainer');
+  const n=document.createElement('div');
+  n.className=`notif ${type}`;
+  n.innerHTML=`<div class="notif-title">${title}</div><div class="notif-msg">${msg}</div>`;
+  container.appendChild(n);
+  setTimeout(()=>{
+    n.classList.add('out');
+    setTimeout(()=>n.remove(),350);
+  },4000);
+}
+
+// ─── BUTTON ACTIONS ───
+function btnAction(type){
+  const btn=event.currentTarget;
+  btn.classList.add('active');
+  setTimeout(()=>btn.classList.remove('active'),1500);
+
+  const actions={
+    dispatch:()=>{addLog('Police units dispatched to surveillance zones','ok');showNotif('🚔 DISPATCH','Police units responding to zones 1 & 2','blue-n');addAlertItem('blue','POLICE DISPATCHED','ALL ZONES');},
+    emergency:()=>{
+      if(!sys.emergencyActive&&!sys.emergencyCooldown){
+        triggerEmergency(Math.random()>.5?1:2);
+      } else {
+        showNotif('⚠ ALREADY ACTIVE','Emergency mode is currently active','red-n');
+      }
+    },
+    track:()=>{addLog('GPS tracking activated – all nodes','info');showNotif('📍 TRACKING','GPS coordinates locked','blue-n');},
+    evidence:()=>{addLog('Evidence package saved to secure server','ok');showNotif('💾 SAVED','Evidence secured in database','green-n');captureEvidence(Math.random()>.5?1:2);},
+    report:()=>{addLog('Incident report generated – ID: RPT-'+Math.floor(Math.random()*9999),'info');showNotif('📋 REPORT','Incident report generated','blue-n');},
+    alert:()=>{addLog('Alert broadcast to all nearby police units','warn');showNotif('📡 BROADCAST','All nearby units notified','yellow-n');addAlertItem('yellow','UNITS ALERTED','NEARBY');},
+    record:()=>{addLog('Evidence recording started – all feeds','ok');showNotif('⏺ RECORDING','All feeds recording to server','green-n');},
+    lock:()=>{addLog('Incident feed locked and secured','info');showNotif('🔒 LOCKED','Feed locked for evidence','blue-n');},
+  };
+  if(actions[type]) actions[type]();
+}
+
+// ─── AI SIMULATION ───
+setInterval(()=>{
+  const conf=(94+Math.random()*5).toFixed(1);
+  document.getElementById('aiConfMain').textContent=conf+'%';
+  document.getElementById('aiConfBar').style.width=conf+'%';
+  document.getElementById('fps1').textContent=Math.floor(27+Math.random()*5);
+  document.getElementById('fps2').textContent=Math.floor(27+Math.random()*5);
+  document.getElementById('networkSignal').textContent=Math.floor(94+Math.random()*6)+'%';
+},2500);
+
+// ─── PERIODIC AUTO EVENTS ───
+let autoTimer=0;
+setInterval(()=>{
+  autoTimer++;
+  // Random motion sim on node 2
+  if(autoTimer%7===0){
+    const m=Math.floor(Math.random()*12);
+    document.getElementById('motion2Bar').style.width=Math.min(100,m*5)+'%';
+    if(m>4){
+      addLog('Motion activity – Node 02 – Zone 2','warn');
+      addAlertItem('yellow','MOTION NODE 02','AREA 2');
+      showNotif('⚡ MOTION DETECTED','Zone 2 activity spike','yellow-n');
+      node2Alert=true;
+      setTimeout(()=>{node2Alert=false;},5000);
+    }
+  }
+  // AI update
+  if(autoTimer%5===0){
+    const h=Math.floor(Math.random()*4);
+    document.getElementById('humanTotal').textContent=h;
+    document.getElementById('humanTotalBar').style.width=(h*15)+'%';
+    if(h>0) addLog(`AI: ${h} human(s) detected in surveillance zone`,'info');
+  }
+  // Periodic status
+  if(autoTimer%15===0){
+    addLog('AI scan cycle complete – all zones nominal','ok');
+    showNotif('✅ SCAN COMPLETE','AI scan cycle complete','green-n');
+  }
+},3000);
+
+// ─── INIT LOGS ───
+addLog('HER ALERT Central Control System online','ok');
+addLog('Camera Node 01 – Street Light Area 1 – connected','ok');
+addLog('Camera Node 02 – Street Light Area 2 – connected','ok');
+addLog('AI surveillance engine initialized','info');
+addLog('Police network uplink established','ok');
+addLog('Real-time threat monitoring active','info');
+setTimeout(()=>{
+  addLog('All systems nominal – monitoring active','ok');
+  showNotif('✅ SYSTEM ONLINE','HER ALERT Control Station ready','green-n');
+  document.getElementById('alertTime1').textContent=new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit'});
+  document.getElementById('alertTime2').textContent=new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit'});
+  document.getElementById('alertTime3').textContent=new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit'});
+},1500);
+// ---- SOCKET.IO + WEBRTC ----
+const socket = io();
+const peerConnections = {};
+
+socket.on('connect', () => {
+  addLog('Connected to HER ALERT server', 'ok');
+  socket.emit('register-dashboard');
+});
+
+socket.on('disconnect', () => {
+  addLog('Server connection lost', 'alert-l');
+});
+
+socket.on('camera-connected', (data) => {
+  const n = data.nodeId;
+  addLog(`Camera Node 0${n} online — ${data.location}`, 'ok');
+  document.getElementById(`camStatus${n}`).textContent = 'ACTIVE';
+  const loadEl = document.getElementById(`camLoading${n}`);
+  if (loadEl) {
+    loadEl.querySelector('.cam-loading-txt').textContent = 'CONNECTING...';
+    loadEl.querySelector('.cam-loading-txt').style.color = 'var(--blue)';
+  }
+});
+
+socket.on('camera-disconnected', (data) => {
+  const n = data.nodeId;
+  addLog(`Camera Node 0${n} went offline`, 'warn');
+  const v = document.getElementById('video' + n);
+  if (v) v.srcObject = null;
+  document.getElementById(`camStatus${n}`).textContent = 'OFFLINE';
+  const loadEl = document.getElementById(`camLoading${n}`);
+  if (loadEl) {
+    loadEl.style.display = 'flex';
+    loadEl.querySelector('.cam-loading-txt').textContent = 'OFFLINE';
+    loadEl.querySelector('.cam-loading-txt').style.color = 'var(--red)';
+  }
+});
+
+socket.on('camera-list', (list) => {
+  addLog(`Active cameras: ${list.length}`, 'info');
+});
+
+socket.on('alert-triggered', (data) => {
+  addLog(`🚨 ALERT from Node 0${data.nodeId} — ${data.location}`, 'alert-l');
+  triggerEmergency(parseInt(data.nodeId));
+});
+
+socket.on('motion-update', (data) => {
+  const n = data.nodeId;
+  const pct = data.motionPct || 0;
+  if (n === '1') {
+    document.getElementById('motion1Bar').style.width = Math.min(100, pct * 4) + '%';
+    handleMotion(pct);
+  } else if (n === '2') {
+    document.getElementById('motion2Bar').style.width = Math.min(100, pct * 4) + '%';
+  }
+  if (data.humans > 0) {
+    document.getElementById('humanTotal').textContent = data.humans;
+    document.getElementById('humanTotalBar').style.width = (data.humans * 12) + '%';
+  }
+});
+
+socket.on('offer', async ({ nodeId, fromSocketId, offer }) => {
+  addLog(`Stream offer from Node 0${nodeId}`, 'info');
+
+  // Close old connection if exists
+  if (peerConnections[nodeId]) {
+    peerConnections[nodeId].close();
+  }
+
+  const pc = new RTCPeerConnection({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+  });
+  peerConnections[nodeId] = pc;
+
+  pc.ontrack = ({ streams, track }) => {
+    addLog(`Track received from Node 0${nodeId}: ${track.kind}`, 'info');
+    if (track.kind !== 'video') return;
+    const v = document.getElementById('video' + nodeId);
+    if (!v) return;
+
+    // Hide the loading spinner
+    const loadEl = document.getElementById('camLoading' + nodeId);
+    if (loadEl) loadEl.style.display = 'none';
+    document.getElementById('camStatus' + nodeId).textContent = 'LIVE';
+
+    // Attach stream and force play
+    v.srcObject = streams[0];
+    v.muted = true;
+    v.play().then(() => {
+      addLog(`Node 0${nodeId} live feed playing`, 'ok');
+    }).catch(err => {
+      addLog(`Node 0${nodeId} play error: ${err.message}`, 'warn');
+      // Try again after short delay
+      setTimeout(() => v.play().catch(() => {}), 500);
+    });
+  };
+
+  pc.onconnectionstatechange = () => {
+    addLog(`Node 0${nodeId} WebRTC state: ${pc.connectionState}`, 'info');
+  };
+
+  pc.onicecandidate = ({ candidate }) => {
+    if (candidate) {
+      socket.emit('ice-candidate', {
+        nodeId,
+        candidate,
+        target: 'camera',
+        targetSocketId: fromSocketId
+      });
+    }
+  };
+
+  await pc.setRemoteDescription(new RTCSessionDescription(offer));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  socket.emit('answer', { nodeId, answer, targetSocketId: fromSocketId });
+  addLog(`Answer sent to Node 0${nodeId}`, 'info');
+});
+
+socket.on('ice-candidate', ({ nodeId, candidate }) => {
+  const pc = peerConnections[nodeId];
+  if (pc && candidate) {
+    pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => {
+      addLog(`ICE error Node 0${nodeId}: ${e.message}`, 'warn');
+    });
+  }
+});
+</script>
+</body>
+</html>
