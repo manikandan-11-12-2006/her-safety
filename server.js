@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 /**
  * ============================================================
  *  HER ALERT – Real-Time AI Surveillance Server
@@ -593,7 +593,7 @@ module.exports = {
   io
 
 };
-=======
+
 /**
  * ============================================================
  *  HER ALERT – Real-Time AI Surveillance Server
@@ -1089,4 +1089,4 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 // ── Module export (for tests) ────────────────────────────────
 module.exports = { app, server, io };
->>>>>>> 173a5b8e3c5b82f1b5796d0aec54d22416e49c0e
+
